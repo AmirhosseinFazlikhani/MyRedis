@@ -1,6 +1,6 @@
 ﻿namespace RESP;
 
-public static class DataTypes
+public static class DataTypePrefixes
 {
     public const char SimpleString = '+';
     public const char SimpleError = '-';

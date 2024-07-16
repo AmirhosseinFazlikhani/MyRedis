@@ -21,7 +21,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\RESP\RESP.csproj" />
+      <ProjectReference Include="..\..\src\RESP\RESP.csproj" />
     </ItemGroup>
 
 </Project>
