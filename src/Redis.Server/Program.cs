@@ -20,29 +20,7 @@ class Program
 
             while (true)
             {
-                Console.Write("Waiting for a connection... ");
-
-                using var client = await server.AcceptTcpClientAsync();
-                Console.WriteLine("Connected!");
-
-                var networkStream = client.GetStream();
-
-                var bytes = new byte[256];
-                int readBytesCount;
-
-                while ((readBytesCount = networkStream.Read(bytes, 0, bytes.Length)) != 0)
-                {
-                    var command = Encoding.UTF8.GetString(bytes, 0, readBytesCount);
-
-                    if (command.Equals("ping", StringComparison.OrdinalIgnoreCase))
-                    {
-                        await networkStream.WriteAsync("PONG::"u8.ToArray());
-                    }
-                    else
-                    {
-                        networkStream.Write("Invalid command::"u8.ToArray());
-                    }
-                }
+                CommandListener.ListenAsync(await server.AcceptTcpClientAsync()).ConfigureAwait(false);
             }
         }
         catch (SocketException e)

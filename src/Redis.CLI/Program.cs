@@ -1,5 +1,6 @@
 ﻿using System.Net.Sockets;
 using System.Text;
+using RESP;
 
 namespace Redis.CLI;
 
@@ -9,7 +10,7 @@ class Program
     {
         var port = 5000;
         var host = "127.0.0.1";
-        
+
         var argCursor = 0;
 
         while (argCursor < args.Length)
@@ -24,7 +25,7 @@ class Program
                     argCursor++;
                     host = args[argCursor];
                     break;
-                default: 
+                default:
                     Console.WriteLine("Undefined argument: {0}", args[argCursor]);
                     return;
             }
@@ -43,7 +44,10 @@ class Program
                 continue;
             }
 
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(command));
+            var parameters = command.Split(' ').Select(Serializer.SerializeBulkString).ToArray();
+            var request = Serializer.SerializeArray(parameters);
+
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(request));
             var response = await GetResponseAsync(stream);
             Console.WriteLine(response);
         }
@@ -51,23 +55,8 @@ class Program
 
     private static async Task<string> GetResponseAsync(NetworkStream stream)
     {
-        var bytes = new byte[256];
-        int readBytesCount;
-        var response = "";
-
-        while ((readBytesCount = await stream.ReadAsync(bytes)) != 0)
-        {
-            var responseChunk = Encoding.UTF8.GetString(bytes, 0, readBytesCount);
-            
-            if (responseChunk.EndsWith("::"))
-            {
-                response += responseChunk[..^2];
-                break;
-            }
-
-            response += responseChunk;
-        }
-        
-        return response;
+        var buffer = new byte[256];
+        var length = await stream.ReadAsync(buffer);
+        return Encoding.UTF8.GetString(buffer[..length]);
     }
 }

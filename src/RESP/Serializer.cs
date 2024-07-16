@@ -4,7 +4,8 @@ namespace RESP;
 
 public static class Serializer
 {
-    private const string Terminator = "\r\n";
+    public const string Terminator = "\r\n";
+    public static readonly byte[] TerminatorBytes = [.."\r\n"u8];
     private const string PositiveInfinity = "inf";
     private const string NegativeInfinity = "-inf";
 
@@ -73,7 +74,7 @@ public static class Serializer
             throw new ArgumentException("Argument length should be 3", nameof(encoding));
         }
 
-        return 
+        return
             $"{DataTypePrefixes.VerbatimString}{value.Length}{Terminator}{encoding}:{value}{Terminator}";
     }
 
@@ -85,7 +86,7 @@ public static class Serializer
         }
 
         var serializedValue = new StringBuilder(values.Sum(v => v.Length));
-        
+
         foreach (var value in values)
         {
             serializedValue.Append(value);
