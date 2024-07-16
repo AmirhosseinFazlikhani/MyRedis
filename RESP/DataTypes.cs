@@ -2,18 +2,18 @@
 
 public static class DataTypes
 {
-    public const byte SimpleString = (byte)'+';
-    public const byte SimpleError = (byte)'-';
-    public const byte Integer = (byte)':';
-    public const byte BulkString = (byte)'$';
-    public const byte Array = (byte)'*';
-    public const byte Null = (byte)'_';
-    public const byte Boolean = (byte)'#';
-    public const byte Double = (byte)',';
-    public const byte BigNumber = (byte)'(';
-    public const byte BulkError = (byte)'!';
-    public const byte VerbatimString = (byte)'=';
-    public const byte Map = (byte)'%';
-    public const byte Set = (byte)'~';
-    public const byte Push = (byte)'>';
+    public const char SimpleString = '+';
+    public const char SimpleError = '-';
+    public const char Integer = ':';
+    public const char BulkString = '$';
+    public const char Array = '*';
+    public const char Null = '_';
+    public const char Boolean = '#';
+    public const char Double = ',';
+    public const char BigNumber = '(';
+    public const char BulkError = '!';
+    public const char VerbatimString = '=';
+    public const char Map = '%';
+    public const char Set = '~';
+    public const char Push = '>';
 }

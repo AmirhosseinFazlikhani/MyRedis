@@ -4,139 +4,110 @@ namespace RESP;
 
 public static class Serializer
 {
-    private static readonly byte[] Terminator = "\r\n"u8.ToArray();
+    private const string Terminator = "\r\n";
+    private static readonly byte[] TerminatorBytes = "\r\n"u8.ToArray();
+    private const string PositiveInfinity = "inf";
+    private const string NegativeInfinity = "-inf";
 
     public static byte[] SerializeSimpleString(string value)
     {
-        var valueBytes = Encoding.UTF8.GetBytes(value);
-        return CreateSimpleSentence(DataTypes.SimpleString, valueBytes);
+        ValidateSimpleText(value);
+        return Encoding.UTF8.GetBytes($"{DataTypes.SimpleString}{value}{Terminator}");
     }
 
     public static byte[] SerializeSimpleError(string value)
     {
-        var valueBytes = Encoding.UTF8.GetBytes(value);
-        return CreateSimpleSentence(DataTypes.SimpleError, valueBytes);
+        ValidateSimpleText(value);
+        return Encoding.UTF8.GetBytes($"{DataTypes.SimpleError}{value}{Terminator}");
     }
 
-    public static byte[] SerializeInteger(int value)
+    public static byte[] SerializeInteger(long value)
     {
-        var valueBytes = BitConverter.GetBytes(value);
-        return CreateSimpleSentence(DataTypes.Integer, valueBytes);
+        return Encoding.UTF8.GetBytes($"{DataTypes.Integer}{value}{Terminator}");
     }
 
     public static byte[] SerializeBulkString(string value)
     {
-        var valueBytes = Encoding.UTF8.GetBytes(value);
-        var valueLengthBytes = BitConverter.GetBytes((uint)valueBytes.Length);
-
-        // $<length>\r\n<data>\r\n
-        // 1,   4   , 2 ,     , 2    = 9
-        var result = new byte[9 + valueBytes.Length];
-        result[0] = DataTypes.BulkString;
-        Buffer.BlockCopy(valueLengthBytes, 0, result, 1, valueLengthBytes.Length);
-        Buffer.BlockCopy(Terminator, 0, result, 5, Terminator.Length);
-        Buffer.BlockCopy(valueBytes, 0, result, 7, value.Length);
-        Buffer.BlockCopy(Terminator, 0, result, result.Length - Terminator.Length, Terminator.Length);
-
-        return result;
+        return Encoding.UTF8.GetBytes($"{DataTypes.BulkString}{value.Length}{Terminator}{value}{Terminator}");
     }
 
     public static byte[] SerializeNull()
     {
-        return [DataTypes.Null, Terminator[0], Terminator[1]];
+        return Encoding.UTF8.GetBytes($"{DataTypes.Null}{Terminator}");
     }
 
     public static byte[] SerializeBoolean(bool value)
     {
-        var valueBytes = BitConverter.GetBytes(value);
-        return CreateSimpleSentence(DataTypes.Boolean, valueBytes);
+        var valueChar = value ? 't' : 'f';
+        return Encoding.UTF8.GetBytes($"{DataTypes.Boolean}{valueChar}{Terminator}");
     }
 
     public static byte[] SerializeDouble(double value)
     {
-        var valueBytes = BitConverter.GetBytes(value);
-        return CreateSimpleSentence(DataTypes.Double, valueBytes);
+        return Encoding.UTF8.GetBytes($"{DataTypes.Double}{value}{Terminator}");
     }
 
-    public static byte[] SerializeBigNumber(long value)
+    public static byte[] SerializeBigNumber(string value)
     {
-        var valueBytes = BitConverter.GetBytes(value);
-        return CreateSimpleSentence(DataTypes.BigNumber, valueBytes);
+        return Encoding.UTF8.GetBytes($"{DataTypes.BigNumber}{value}{Terminator}");
+    }
+
+    public static byte[] GetPositiveInfinity()
+    {
+        return Encoding.UTF8.GetBytes($"{DataTypes.Double}{PositiveInfinity}{Terminator}");
+    }
+
+    public static byte[] GetNegativeInfinity()
+    {
+        return Encoding.UTF8.GetBytes($"{DataTypes.Double}{NegativeInfinity}{Terminator}");
     }
 
     public static byte[] SerializeBulkError(string value)
     {
-        var valueBytes = Encoding.UTF8.GetBytes(value);
-        var valueLengthBytes = BitConverter.GetBytes((uint)valueBytes.Length);
-
-        // !<length>\r\n<data>\r\n
-        // 1,   4   , 2 ,     , 2    = 9
-        var result = new byte[9 + valueBytes.Length];
-        result[0] = DataTypes.BulkError;
-        Buffer.BlockCopy(valueLengthBytes, 0, result, 1, valueLengthBytes.Length);
-        Buffer.BlockCopy(Terminator, 0, result, 5, Terminator.Length);
-        Buffer.BlockCopy(valueBytes, 0, result, 7, value.Length);
-        Buffer.BlockCopy(Terminator, 0, result, result.Length - Terminator.Length, Terminator.Length);
-
-        return result;
+        return Encoding.UTF8.GetBytes($"{DataTypes.BulkError}{value.Length}{Terminator}{value}{Terminator}");
     }
 
     public static byte[] SerializeVerbatimString(string value, string encoding)
     {
-        const int encodingLength = 3;
-
         if (encoding.Length != 3)
         {
             throw new ArgumentException("Argument length should be 3", nameof(encoding));
         }
 
-        var valueBytes = Encoding.UTF8.GetBytes(value);
-        var valueLengthBytes = BitConverter.GetBytes((uint)valueBytes.Length);
-        var encodingBytes = Encoding.UTF8.GetBytes(encoding);
-
-        // =<length>\r\n<encoding>:<data>\r\n
-        // 1,   4   , 2 ,    3   ,1,     , 2    = 13
-        var result = new byte[13 + valueBytes.Length];
-        result[0] = DataTypes.VerbatimString;
-        Buffer.BlockCopy(valueLengthBytes, 0, result, 1, valueLengthBytes.Length);
-        Buffer.BlockCopy(Terminator, 0, result, 5, Terminator.Length);
-        Buffer.BlockCopy(encodingBytes, 0, result, 7, encodingLength);
-        result[10] = (byte)':';
-        Buffer.BlockCopy(valueBytes, 0, result, 11, value.Length);
-        Buffer.BlockCopy(Terminator, 0, result, result.Length - Terminator.Length, Terminator.Length);
-
-        return result;
+        return Encoding.UTF8.GetBytes(
+            $"{DataTypes.VerbatimString}{value.Length}{Terminator}{encoding}:{value}{Terminator}");
     }
 
     public static byte[] SerializeArray(byte[][] values)
     {
-        var arrayValue = values.Aggregate((p, c) =>
-            {
-                var result = new byte[p.Length + c.Length];
-                Buffer.BlockCopy(p, 0, result, 0, p.Length);
-                Buffer.BlockCopy(c, 0, result, p.Length, c.Length);
-                return result;
-            })
-            .ToArray();
-
-        var valuesLengthBytes = BitConverter.GetBytes(values.Length);
-
-        var result = new byte[6 + values.Sum(v => v.Length)];
-        result[0] = DataTypes.Array;
-        Buffer.BlockCopy(valuesLengthBytes, 0, result, 1, valuesLengthBytes.Length);
-        Buffer.BlockCopy(arrayValue, 0, result, 5, arrayValue.Length);
-        Buffer.BlockCopy(Terminator, 0, result, result.Length - Terminator.Length, Terminator.Length);
+        if (values.Length == 0)
+        {
+            return Encoding.UTF8.GetBytes($"{DataTypes.Array}0{Terminator}");
+        }
+        
+        var arrayLengthBytes =  Encoding.UTF8.GetBytes(values.Length.ToString());
+        var result = new byte[3 + arrayLengthBytes.Length + values.Sum(v => v.Length)];
+        result[0] = (byte)DataTypes.Array;
+        var resultOffset = 1;
+        Buffer.BlockCopy(arrayLengthBytes, 0, result, resultOffset, arrayLengthBytes.Length);
+        resultOffset += arrayLengthBytes.Length;
+        Buffer.BlockCopy(TerminatorBytes, 0, result, resultOffset, TerminatorBytes.Length);
+        resultOffset += TerminatorBytes.Length;
+        
+        foreach (var value in values)
+        {
+            Buffer.BlockCopy(value, 0, result, resultOffset, value.Length);
+            resultOffset += value.Length;
+        }
 
         return result;
     }
 
-    private static byte[] CreateSimpleSentence(byte dataType, byte[] value)
+    private static void ValidateSimpleText(string value)
     {
-        var result = new byte[1 + value.Length + Terminator.Length];
-        result[0] = dataType;
-        Buffer.BlockCopy(value, 0, result, 1, value.Length);
-        Buffer.BlockCopy(Terminator, 0, result, result.Length - Terminator.Length, Terminator.Length);
-
-        return result;
+        if (value.Any(c => c is '\n' or '\r'))
+        {
+            throw new ArgumentException("Invalid character", nameof(value));
+        }
     }
 }
