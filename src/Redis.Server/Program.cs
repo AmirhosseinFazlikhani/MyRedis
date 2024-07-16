@@ -20,7 +20,7 @@ class Program
 
             while (true)
             {
-                CommandListener.ListenAsync(await server.AcceptTcpClientAsync()).ConfigureAwait(false);
+                CommandListener.ListenAsync(await server.AcceptTcpClientAsync());
             }
         }
         catch (SocketException e)
