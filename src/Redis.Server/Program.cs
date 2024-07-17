@@ -8,14 +8,30 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        var port = args.Length > 1 && args[0] == "-p" ? int.Parse(args[1]) : 5000;
+        var ip = "127.0.0.1";
+        var port = 6379;
+        
+        var currentArgIndex = 0;
+        while (currentArgIndex < args.Length)
+        {
+            switch (args[currentArgIndex])
+            {
+                case "-h":
+                    ip = args[++currentArgIndex];
+                    currentArgIndex++;
+                    break;
+                case "-p":
+                    port = int.Parse(args[++currentArgIndex]);
+                    currentArgIndex++;
+                    break;
+            }
+        }
         
         TcpListener? server = null;
 
         try
         {
-            var localAddr = IPAddress.Parse("127.0.0.1");
-            server = new TcpListener(localAddr, port);
+            server = new TcpListener(IPAddress.Parse(ip), port);
             server.Start();
 
             while (true)
