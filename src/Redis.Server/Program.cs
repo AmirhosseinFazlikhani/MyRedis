@@ -34,9 +34,15 @@ class Program
             server = new TcpListener(IPAddress.Parse(ip), port);
             server.Start();
 
+            var lastConnectionId = 0;
+            
             while (true)
             {
-                CommandListener.ListenAsync(await server.AcceptTcpClientAsync());
+                var client = await server.AcceptTcpClientAsync();
+                Console.WriteLine("New connection!");
+#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+                new Connection(++lastConnectionId, client).StartAsync();
+#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
             }
         }
         catch (SocketException e)

@@ -4,11 +4,20 @@ using RESP;
 
 namespace Redis.Server;
 
-public static class CommandListener
+public class Connection : IDisposable
 {
-    public static async Task ListenAsync(TcpClient client)
+    private readonly int _id;
+    private readonly TcpClient _tcpClient;
+
+    public Connection(int id, TcpClient tcpClient)
     {
-        var stream = client.GetStream();
+        _id = id;
+        _tcpClient = tcpClient;
+    }
+
+    public async Task StartAsync()
+    {
+        var stream = _tcpClient.GetStream();
 
         var buffer = new byte[256];
         int readBytesCount;
@@ -38,8 +47,8 @@ public static class CommandListener
                 parametersCount--;
             }
 
-            var response = await CommandHandler.HandleAsync(parameters);
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(response));
+            var reply = CommandHandler.Handle(parameters, _id);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(reply));
         }
     }
 
@@ -76,5 +85,10 @@ public static class CommandListener
         offset = end = buffer.Length - 1;
 
         return Encoding.UTF8.GetString(result);
+    }
+
+    public void Dispose()
+    {
+        _tcpClient.Dispose();
     }
 }
