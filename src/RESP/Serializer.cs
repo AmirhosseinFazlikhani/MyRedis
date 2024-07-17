@@ -95,6 +95,19 @@ public static class Serializer
         return $"{DataTypePrefixes.Array}{values.Length}{Terminator}{serializedValue}";
     }
 
+    public static string SerializerMap(KeyValuePair<string, string>[] entries)
+    {
+        var builder = new StringBuilder($"{DataTypePrefixes.Map}{entries.Length}{Terminator}");
+
+        foreach (var entry in entries)
+        {
+            builder.Append(SerializeSimpleString(entry.Key));
+            builder.Append(entry.Value);
+        }
+
+        return builder.ToString();
+    }
+
     private static void ValidateSimpleText(string value)
     {
         if (value.Any(c => c is '\n' or '\r'))
