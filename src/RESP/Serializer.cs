@@ -26,9 +26,11 @@ public static class Serializer
         return $"{DataTypePrefixes.Integer}{value}{Terminator}";
     }
 
-    public static string SerializeBulkString(string value)
+    public static string SerializeBulkString(string? value)
     {
-        return $"{DataTypePrefixes.BulkString}{value.Length}{Terminator}{value}{Terminator}";
+        return value is null
+            ? $"{DataTypePrefixes.BulkString}-1{Terminator}"
+            : $"{DataTypePrefixes.BulkString}{value.Length}{Terminator}{value}{Terminator}";
     }
 
     public static string SerializeNull()
