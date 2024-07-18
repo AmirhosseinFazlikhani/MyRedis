@@ -1,38 +1,36 @@
 ﻿using System.Net;
 using System.Net.Sockets;
+using CommandLine;
 
 namespace Redis.Server;
 
 class Program
 {
+    class Options
+    {
+        [Option('p', "port", Required = false, Default = 6379)]
+        public int Port { get; set; }
+        
+        [Option('h', "Host", Required = false, Default = "127.0.0.1")]
+        public string Host { get; set; }
+    }
+    
     static async Task Main(string[] args)
     {
-        var ip = "127.0.0.1";
-        var port = 6379;
+        var options = Parser.Default.ParseArguments<Options>(args);
 
-        var currentArgIndex = 0;
-        while (currentArgIndex < args.Length)
+        if (options.Errors.Any())
         {
-            switch (args[currentArgIndex])
-            {
-                case "-h":
-                    ip = args[++currentArgIndex];
-                    currentArgIndex++;
-                    break;
-                case "-p":
-                    port = int.Parse(args[++currentArgIndex]);
-                    currentArgIndex++;
-                    break;
-            }
+            return;
         }
 
         TcpListener? server = null;
 
         try
         {
-            server = new TcpListener(IPAddress.Parse(ip), port);
+            server = new TcpListener(IPAddress.Parse(options.Value.Host), options.Value.Port);
             server.Start();
-            Console.WriteLine("Server is now listening on {0}:{1}", ip, port);
+            Console.WriteLine("Server is now listening on {0}:{1}", options.Value.Host, options.Value.Port);
 
             var lastConnectionId = 0;
 
