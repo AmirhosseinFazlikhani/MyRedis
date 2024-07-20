@@ -5,7 +5,7 @@ namespace Redis.Server;
 
 public static class CommandMediator
 {
-    private static readonly Dictionary<string, ICommandHandler> _handlers = new()
+    private static readonly Dictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase)
     {
         { "ping", new PingCommandHandler() },
         { "hello", new HelloCommandHandler() },
