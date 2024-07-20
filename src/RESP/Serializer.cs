@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using RESP.DataTypes;
 
 namespace RESP;
 
@@ -6,105 +7,96 @@ public static class Serializer
 {
     public const string Terminator = "\r\n";
     public static readonly byte[] TerminatorBytes = [.."\r\n"u8];
-    private const string PositiveInfinity = "inf";
-    private const string NegativeInfinity = "-inf";
 
-    public static string SerializeSimpleString(string value)
+    public static string Serialize(RespSimpleString data)
     {
-        ValidateSimpleText(value);
-        return $"{DataTypePrefixes.SimpleString}{value}{Terminator}";
+        ValidateSimpleText(data.Value);
+        return $"{RespSimpleString.Prefix}{data.Value}{Terminator}";
     }
 
-    public static string SerializeSimpleError(string value)
+    public static string Serialize(RespSimpleError data)
     {
-        ValidateSimpleText(value);
-        return $"{DataTypePrefixes.SimpleError}{value}{Terminator}";
+        ValidateSimpleText(data.Value);
+        return $"{RespSimpleError.Prefix}{data.Value}{Terminator}";
     }
 
-    public static string SerializeInteger(long value)
+    public static string Serialize(RespInteger data)
     {
-        return $"{DataTypePrefixes.Integer}{value}{Terminator}";
+        return $"{RespInteger.Prefix}{data.Value}{Terminator}";
     }
 
-    public static string SerializeBulkString(string? value)
+    public static string Serialize(RespBulkString data)
     {
-        return value is null
-            ? $"{DataTypePrefixes.BulkString}-1{Terminator}"
-            : $"{DataTypePrefixes.BulkString}{value.Length}{Terminator}{value}{Terminator}";
+        return data.Value is null
+            ? $"{RespBulkString.Prefix}-1{Terminator}"
+            : $"{RespBulkString.Prefix}{data.Value.Length}{Terminator}{data.Value}{Terminator}";
     }
 
-    public static string SerializeNull()
+    public static string Serialize(RespNull data)
     {
-        return $"{DataTypePrefixes.Null}{Terminator}";
+        return $"{RespNull.Prefix}{Terminator}";
     }
 
-    public static string SerializeBoolean(bool value)
+    public static string Serialize(RespBoolean data)
     {
-        var valueChar = value ? 't' : 'f';
-        return $"{DataTypePrefixes.Boolean}{valueChar}{Terminator}";
+        var valueChar = data.Value ? 't' : 'f';
+        return $"{RespBoolean.Prefix}{valueChar}{Terminator}";
     }
 
-    public static string SerializeDouble(double value)
+    public static string Serialize(RespDouble data)
     {
-        return $"{DataTypePrefixes.Double}{value}{Terminator}";
+        return $"{RespDouble.Prefix}{data.Value}{Terminator}";
     }
 
-    public static string SerializeBigNumber(string value)
+    public static string Serialize(RespBigNumber data)
     {
-        return $"{DataTypePrefixes.BigNumber}{value}{Terminator}";
+        return $"{RespBigNumber.Prefix}{data.Value}{Terminator}";
     }
 
-    public static string GetPositiveInfinity()
+    public static string Serialize(RespBulkError data)
     {
-        return $"{DataTypePrefixes.Double}{PositiveInfinity}{Terminator}";
+        return $"{RespBulkError.Prefix}{data.Value.Length}{Terminator}{data.Value}{Terminator}";
     }
 
-    public static string GetNegativeInfinity()
+    public static string Serialize(RespVerbatimString data)
     {
-        return $"{DataTypePrefixes.Double}{NegativeInfinity}{Terminator}";
-    }
-
-    public static string SerializeBulkError(string value)
-    {
-        return $"{DataTypePrefixes.BulkError}{value.Length}{Terminator}{value}{Terminator}";
-    }
-
-    public static string SerializeVerbatimString(string value, string encoding)
-    {
-        if (encoding.Length != 3)
+        if (data.Encoding.Length != 3)
         {
-            throw new ArgumentException("Argument length should be 3", nameof(encoding));
+            throw new ArgumentException("Encoding length should be 3", nameof(data.Encoding));
         }
 
         return
-            $"{DataTypePrefixes.VerbatimString}{value.Length}{Terminator}{encoding}:{value}{Terminator}";
+            $"{RespVerbatimString.Prefix}{data.Value.Length}{Terminator}{data.Encoding}:{data.Value}{Terminator}";
     }
 
-    public static string SerializeArray(string[] values)
+    public static string Serialize(RespArray data)
     {
-        if (values.Length == 0)
+        if (data.Items.Length == 0)
         {
-            return $"{DataTypePrefixes.Array}0{Terminator}";
+            return $"{RespArray.Prefix}0{Terminator}";
         }
 
-        var serializedValue = new StringBuilder(values.Sum(v => v.Length));
+        var serializedValue = new StringBuilder();
 
-        foreach (var value in values)
+        foreach (var item in data.Items)
         {
-            serializedValue.Append(value);
+            var serializedItem = (string)Serialize((dynamic)item);
+            serializedValue.Append(serializedItem);
         }
 
-        return $"{DataTypePrefixes.Array}{values.Length}{Terminator}{serializedValue}";
+        return $"{RespArray.Prefix}{data.Items.Length}{Terminator}{serializedValue}";
     }
 
-    public static string SerializerMap(KeyValuePair<string, string>[] entries)
+    public static string Serialize(RespMap data)
     {
-        var builder = new StringBuilder($"{DataTypePrefixes.Map}{entries.Length}{Terminator}");
+        var builder = new StringBuilder($"{RespMap.Prefix}{data.Entries.Length}{Terminator}");
 
-        foreach (var entry in entries)
+        foreach (var entry in data.Entries)
         {
-            builder.Append(SerializeSimpleString(entry.Key));
-            builder.Append(entry.Value);
+            var key = Serialize(entry.Key);
+            var value = (string)Serialize((dynamic)entry.Value);
+            builder.Append(key);
+            builder.Append(value);
         }
 
         return builder.ToString();

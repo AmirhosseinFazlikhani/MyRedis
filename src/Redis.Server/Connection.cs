@@ -1,6 +1,7 @@
 ﻿using System.Net.Sockets;
 using System.Text;
 using RESP;
+using RESP.DataTypes;
 
 namespace Redis.Server;
 
@@ -26,7 +27,7 @@ public class Connection : IDisposable
         {
             if (buffer[0] != '*')
             {
-                var error = Serializer.SerializeSimpleError("Unknown command");
+                var error = Serializer.Serialize(new RespSimpleError("ERR Protocol error"));
                 await stream.WriteAsync(Encoding.UTF8.GetBytes(error));
                 continue;
             }
@@ -47,8 +48,9 @@ public class Connection : IDisposable
                 parametersCount--;
             }
 
-            var reply = CommandHandler.Handle(parameters, _id);
-            await stream.WriteAsync(Encoding.UTF8.GetBytes(reply));
+            var reply = CommandMediator.Send(parameters, new RequestContext { ConnectionId = _id });
+            var serializedReply = (string)Serializer.Serialize((dynamic)reply);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(serializedReply));
         }
     }
 
