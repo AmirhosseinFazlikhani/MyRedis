@@ -4,6 +4,13 @@ namespace Redis.Server.CommandHandlers;
 
 public class SetCommandHandler : ICommandHandler
 {
+    private readonly IClock _clock;
+
+    public SetCommandHandler(IClock clock)
+    {
+        _clock = clock;
+    }
+    
     public IRespData Handle(string[] parameters, RequestContext context)
     {
         var entry = new Entry(parameters[2]);
@@ -11,9 +18,9 @@ public class SetCommandHandler : ICommandHandler
         var options = parameters.AsSpan(3..);
         var optionsCount = options.Length;
 
-        if (optionsCount > 5)
+        if (optionsCount > 4)
         {
-            return ReplyHelper.WrongArgumentsNumberError("set");
+            return ReplyHelper.WrongArgumentsNumberError("SET");
         }
 
         var setCond = SetCond.None;
@@ -36,7 +43,7 @@ public class SetCommandHandler : ICommandHandler
                     return ReplyHelper.SyntaxError();
                 }
 
-                entry.Expiry = DateTime.UtcNow.AddSeconds(seconds);
+                entry.Expiry = _clock.Now().AddSeconds(seconds);
             }
             else if (options[currentOptionIndex].Equals("px", StringComparison.OrdinalIgnoreCase))
             {
@@ -52,7 +59,7 @@ public class SetCommandHandler : ICommandHandler
                     return ReplyHelper.SyntaxError();
                 }
 
-                entry.Expiry = DateTime.UtcNow.AddMilliseconds(milliseconds);
+                entry.Expiry = _clock.Now().AddMilliseconds(milliseconds);
             }
             else if (options[currentOptionIndex].Equals("xx", StringComparison.OrdinalIgnoreCase))
             {

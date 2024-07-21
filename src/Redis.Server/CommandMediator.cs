@@ -10,7 +10,7 @@ public static class CommandMediator
         { "ping", new PingCommandHandler() },
         { "hello", new HelloCommandHandler() },
         { "get", new GetCommandHandler() },
-        { "set", new SetCommandHandler() },
+        { "set", new SetCommandHandler(new Clock()) },
     };
 
     public static IRespData Send(string[] parameters, RequestContext context)

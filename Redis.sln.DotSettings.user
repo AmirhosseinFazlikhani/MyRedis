@@ -1,6 +1,13 @@
 ﻿<wpf:ResourceDictionary xml:space="preserve" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:System;assembly=mscorlib" xmlns:ss="urn:shemas-jetbrains-com:settings-storage-xaml" xmlns:wpf="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+	<s:String x:Key="/Default/Environment/Highlighting/HighlightingSourceSnapshotLocation/@EntryValue">C:\Users\AmirHossein\AppData\Local\JetBrains\Rider2024.1\resharper-host\temp\Rider\vAny\CoverageData\_Redis.-2124564679\Snapshot\snapshot.utdcvr</s:String>
 	<s:String x:Key="/Default/Environment/UnitTesting/UnitTestSessionStore/Sessions/=95e03f22_002D8596_002D4865_002Dbed5_002Dcfebbf9719b4/@EntryIndexedValue">&lt;SessionState ContinuousTestingMode="0" IsActive="True" Name="SerializeSimpleString_should_serialize_correctly" xmlns="urn:schemas-jetbrains-com:jetbrains-ut-session"&gt;&#xD;
   &lt;TestAncestor&gt;&#xD;
     &lt;TestId&gt;xUnit::1C2531B5-B479-4892-8E36-B387EC2CE64C::net8.0::RESP.Tests.Unit.SerializerTest&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::9BB01578-2261-479F-9352-8AD57678E794::net8.0::Redis.Server.Tests.Unit.CommandHandler.SetCommandHandlerTest.Should_return_error_when_there_are_some_additional_arguments&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::9BB01578-2261-479F-9352-8AD57678E794::net8.0::Redis.Server.Tests.Unit.CommandHandler.SetCommandHandlerTest.Should_return_error_when_expiry_is_not_an_integer&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::9BB01578-2261-479F-9352-8AD57678E794::net8.0::Redis.Server.Tests.Unit.CommandHandler.SetCommandHandlerTest.Should_return_error_when_there_are_more_than_one_expiry&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::9BB01578-2261-479F-9352-8AD57678E794::net8.0::Redis.Server.Tests.Unit.CommandHandler.SetCommandHandlerTest.Should_return_error_when_there_are_more_than_one_set_condition&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::9BB01578-2261-479F-9352-8AD57678E794::net8.0::Redis.Server.Tests.Unit.CommandHandler.SetCommandHandlerTest.Should_set_successfully_key_has_no_expiry&lt;/TestId&gt;&#xD;
+    &lt;TestId&gt;xUnit::9BB01578-2261-479F-9352-8AD57678E794::net8.0::Redis.Server.Tests.Unit.CommandHandler.SetCommandHandlerTest&lt;/TestId&gt;&#xD;
   &lt;/TestAncestor&gt;&#xD;
 &lt;/SessionState&gt;</s:String></wpf:ResourceDictionary>
