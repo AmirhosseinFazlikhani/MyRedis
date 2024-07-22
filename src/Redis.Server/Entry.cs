@@ -8,9 +8,9 @@ public class Entry
     }
 
     private readonly string _value;
-    public string? GetValue() => IsExpired() ? null : _value;
+    public string? GetValue(IClock clock) => IsExpired(clock) ? null : _value;
 
     public DateTime? Expiry { get; set; }
 
-    public bool IsExpired() => Expiry.HasValue && Expiry.Value < DateTime.UtcNow;
+    public bool IsExpired(IClock clock) => Expiry.HasValue && Expiry.Value < clock.Now();
 }

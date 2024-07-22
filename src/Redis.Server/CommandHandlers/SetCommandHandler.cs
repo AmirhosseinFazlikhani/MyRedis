@@ -99,7 +99,7 @@ public class SetCommandHandler : ICommandHandler
             case SetCond.Exists:
                 lock (parameters[1])
                 {
-                    if (!DatabaseProvider.Database.TryGetValue(parameters[1], out var value) || value.IsExpired())
+                    if (!DatabaseProvider.Database.TryGetValue(parameters[1], out var value) || value.IsExpired(_clock))
                     {
                         return new RespBulkString(null);
                     }
@@ -111,7 +111,7 @@ public class SetCommandHandler : ICommandHandler
             case SetCond.NotExists:
                 lock (parameters[1])
                 {
-                    if (DatabaseProvider.Database.TryGetValue(parameters[1], out var value) && !value.IsExpired())
+                    if (DatabaseProvider.Database.TryGetValue(parameters[1], out var value) && !value.IsExpired(_clock))
                     {
                         return new RespBulkString(null);
                     }

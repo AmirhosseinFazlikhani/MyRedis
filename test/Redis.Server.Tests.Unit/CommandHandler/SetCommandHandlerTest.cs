@@ -61,7 +61,7 @@ public class SetCommandHandlerTest
 
         Assert.Equal(new RespSimpleString("OK"), reply);
         Assert.True(DatabaseProvider.Database.TryGetValue(key, out var entry));
-        Assert.Equal(value, entry.GetValue());
+        Assert.Equal(value, entry.GetValue(new Clock()));
         Assert.Null(entry.Expiry);
     }
 
@@ -120,7 +120,7 @@ public class SetCommandHandlerTest
         Assert.Equal(new RespSimpleString("OK"), reply1);
         Assert.Equal(new RespSimpleString("OK"), reply2);
         Assert.True(DatabaseProvider.Database.TryGetValue(key, out var entry));
-        Assert.Equal(value2, entry.GetValue());
+        Assert.Equal(value2, entry.GetValue(clock));
         Assert.Equal(clock.Now().AddSeconds(expiry2), entry.Expiry);
     }
 
@@ -143,7 +143,7 @@ public class SetCommandHandlerTest
         Assert.Equal(new RespSimpleString("OK"), reply1);
         Assert.Equal(new RespSimpleString("OK"), reply2);
         Assert.True(DatabaseProvider.Database.TryGetValue(key, out var entry));
-        Assert.Equal(value2, entry.GetValue());
+        Assert.Equal(value2, entry.GetValue(clock));
         Assert.Equal(clock.Now().AddSeconds(expiry1), entry.Expiry);
     }
 
@@ -171,7 +171,7 @@ public class SetCommandHandlerTest
         Assert.Equal(new RespSimpleString("OK"), reply1);
         Assert.Equal(new RespSimpleString("OK"), reply2);
         Assert.True(DatabaseProvider.Database.TryGetValue(key, out var entry));
-        Assert.Equal(value2, entry.GetValue());
+        Assert.Equal(value2, entry.GetValue(new Clock()));
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class SetCommandHandlerTest
         Assert.Equal(new RespSimpleString("OK"), reply1);
         Assert.Equal(new RespBulkString(null), reply2);
         Assert.True(DatabaseProvider.Database.TryGetValue(key, out var entry));
-        Assert.Equal(value1, entry.GetValue());
+        Assert.Equal(value1, entry.GetValue(new Clock()));
     }
 
     [Fact]
@@ -200,6 +200,6 @@ public class SetCommandHandlerTest
 
         Assert.Equal(new RespSimpleString("OK"), reply);
         Assert.True(DatabaseProvider.Database.TryGetValue(key, out var entry));
-        Assert.Equal(value, entry.GetValue());
+        Assert.Equal(value, entry.GetValue(new Clock()));
     }
 }

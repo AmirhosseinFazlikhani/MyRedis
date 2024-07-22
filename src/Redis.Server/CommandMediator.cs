@@ -9,7 +9,7 @@ public static class CommandMediator
     {
         { "ping", new PingCommandHandler() },
         { "hello", new HelloCommandHandler() },
-        { "get", new GetCommandHandler() },
+        { "get", new GetCommandHandler(new Clock()) },
         { "set", new SetCommandHandler(new Clock()) },
     };
 
