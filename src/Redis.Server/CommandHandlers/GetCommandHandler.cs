@@ -18,7 +18,17 @@ public class GetCommandHandler : ICommandHandler
             return ReplyHelper.WrongArgumentsNumberError("GET");
         }
 
-        DatabaseProvider.Database.TryGetValue(parameters[1], out var value);
-        return new RespBulkString(value?.GetValue(_clock));
+        if (!DatabaseProvider.Database.TryGetValue(parameters[1], out var value))
+        {
+            return new RespBulkString(null);
+        }
+
+        if (value.IsExpired(_clock))
+        {
+            DatabaseProvider.Database.Remove(parameters[1], out _);
+            return new RespBulkString(null);
+        }
+
+        return new RespBulkString(value.Value);
     }
 }

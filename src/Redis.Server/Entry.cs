@@ -4,12 +4,10 @@ public class Entry
 {
     public Entry(string value)
     {
-        _value = value;
+        Value = value;
     }
 
-    private readonly string _value;
-    public string? GetValue(IClock clock) => IsExpired(clock) ? null : _value;
-
+    public string Value { get; }
     public DateTime? Expiry { get; set; }
 
     public bool IsExpired(IClock clock) => Expiry.HasValue && Expiry.Value < clock.Now();

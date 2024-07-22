@@ -36,13 +36,30 @@ public class GetCommandHandlerTest
 
         DatabaseProvider.Database[key] = new Entry(_fixture.Create<string>())
         {
-            Expiry = clock.Now().Subtract(TimeSpan.FromMilliseconds(1))
+            Expiry = clock.Now().Subtract(TimeSpan.FromSeconds(1))
         };
-        
+
         var reply = new GetCommandHandler(clock)
             .Handle(["GET", key], new RequestContext());
 
         Assert.Equal(new RespBulkString(null), reply);
+    }
+
+    [Fact]
+    public void Should_delete_key_when_it_has_expired()
+    {
+        var key = _fixture.Create<string>();
+        var clock = Substitute.For<IClock>();
+        clock.Now().Returns(DateTime.UtcNow);
+
+        DatabaseProvider.Database[key] = new Entry(_fixture.Create<string>())
+        {
+            Expiry = clock.Now().Subtract(TimeSpan.FromSeconds(1))
+        };
+
+        new GetCommandHandler(clock).Handle(["GET", key], new RequestContext());
+
+        Assert.False(DatabaseProvider.Database.ContainsKey(key));
     }
 
     [Fact]
@@ -52,7 +69,7 @@ public class GetCommandHandlerTest
         var value = _fixture.Create<string>();
 
         DatabaseProvider.Database[key] = new Entry(value);
-        
+
         var reply = new GetCommandHandler(new Clock())
             .Handle(["GET", key], new RequestContext());
 
