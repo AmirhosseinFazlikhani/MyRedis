@@ -125,6 +125,35 @@ public class SetCommandHandlerTest
     }
 
     [Fact]
+    public void Should_update_value_and_expiry_when_key_already_exists_but_has_expired()
+    {
+        var key = _fixture.Create<string>();
+        var value1 = _fixture.Create<string>();
+        var value2 = _fixture.Create<string>();
+        var expiry1 = _fixture.Create<long>();
+        var expiry2 = _fixture.Create<long>();
+
+        var now = DateTime.UtcNow;
+        var clock1 = Substitute.For<IClock>();
+        clock1.Now().Returns(now);
+
+        var reply1 = new SetCommandHandler(clock1)
+            .Handle(["SET", key, value1, "EX", expiry1.ToString()], new RequestContext());
+        
+        var clock2 = Substitute.For<IClock>();
+        clock2.Now().Returns(now.AddSeconds(expiry1 + 1));
+        
+        var reply2 = new SetCommandHandler(clock2)
+            .Handle(["SET", key, value2, "EX", expiry2.ToString(), "KEEPTTL"], new RequestContext());
+
+        Assert.Equal(new RespSimpleString("OK"), reply1);
+        Assert.Equal(new RespSimpleString("OK"), reply2);
+        Assert.True(DatabaseProvider.Database.TryGetValue(key, out var entry));
+        Assert.Equal(value2, entry.Value);
+        Assert.Equal(clock2.Now().AddSeconds(expiry2), entry.Expiry);
+    }
+
+    [Fact]
     public void Should_update_value_and_keep_expiry_when_key_already_exists_and_there_is_KEEPTTL_option()
     {
         var key = _fixture.Create<string>();
@@ -138,7 +167,8 @@ public class SetCommandHandlerTest
 
         var commandHandler = new SetCommandHandler(clock);
         var reply1 = commandHandler.Handle(["SET", key, value1, "EX", expiry1.ToString()], new RequestContext());
-        var reply2 = commandHandler.Handle(["SET", key, value2, "EX", expiry2.ToString(), "KEEPTTL"], new RequestContext());
+        var reply2 = commandHandler.Handle(["SET", key, value2, "EX", expiry2.ToString(), "KEEPTTL"],
+            new RequestContext());
 
         Assert.Equal(new RespSimpleString("OK"), reply1);
         Assert.Equal(new RespSimpleString("OK"), reply2);

@@ -10,7 +10,7 @@ public class SetCommandHandler : ICommandHandler
     {
         _clock = clock;
     }
-    
+
     public IRespData Handle(string[] parameters, RequestContext context)
     {
         var entry = new Entry(parameters[2]);
@@ -131,9 +131,13 @@ public class SetCommandHandler : ICommandHandler
     {
         if (keepTtl)
         {
-            DatabaseProvider.Database.AddOrUpdate(key, entry, (_, e) =>
+            DatabaseProvider.Database.AddOrUpdate(key, entry, (_, oldEntry) =>
             {
-                entry.Expiry = e.Expiry;
+                if (!oldEntry.IsExpired(_clock))
+                {
+                    entry.Expiry = oldEntry.Expiry;
+                }
+
                 return entry;
             });
         }
