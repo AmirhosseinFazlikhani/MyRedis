@@ -3,7 +3,7 @@ using RESP.DataTypes;
 
 namespace RESP;
 
-public static class Serializer
+public static class Resp2Serializer
 {
     public const string Terminator = "\r\n";
     public static readonly byte[] TerminatorBytes = [.."\r\n"u8];
@@ -30,11 +30,6 @@ public static class Serializer
         return data.Value is null
             ? $"{RespBulkString.Prefix}-1{Terminator}"
             : $"{RespBulkString.Prefix}{data.Value.Length}{Terminator}{data.Value}{Terminator}";
-    }
-
-    public static string Serialize(RespNull data)
-    {
-        return $"{RespNull.Prefix}{Terminator}";
     }
 
     public static string Serialize(RespBoolean data)
@@ -85,21 +80,6 @@ public static class Serializer
         }
 
         return $"{RespArray.Prefix}{data.Items.Length}{Terminator}{serializedValue}";
-    }
-
-    public static string Serialize(RespMap data)
-    {
-        var builder = new StringBuilder($"{RespMap.Prefix}{data.Entries.Length}{Terminator}");
-
-        foreach (var entry in data.Entries)
-        {
-            var key = Serialize(entry.Key);
-            var value = (string)Serialize((dynamic)entry.Value);
-            builder.Append(key);
-            builder.Append(value);
-        }
-
-        return builder.ToString();
     }
 
     private static void ValidateSimpleText(string value)

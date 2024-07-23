@@ -27,7 +27,7 @@ public class Connection : IDisposable
         {
             if (buffer[0] != '*')
             {
-                var error = Serializer.Serialize(new RespSimpleError("ERR Protocol error"));
+                var error = Resp2Serializer.Serialize(new RespSimpleError("ERR Protocol error"));
                 await stream.WriteAsync(Encoding.UTF8.GetBytes(error));
                 continue;
             }
@@ -49,7 +49,7 @@ public class Connection : IDisposable
             }
 
             var reply = CommandMediator.Send(parameters, new RequestContext { ConnectionId = _id });
-            var serializedReply = (string)Serializer.Serialize((dynamic)reply);
+            var serializedReply = (string)Resp2Serializer.Serialize((dynamic)reply);
             await stream.WriteAsync(Encoding.UTF8.GetBytes(serializedReply));
         }
     }
@@ -72,7 +72,7 @@ public class Connection : IDisposable
 
         var size = int.Parse(chunk[1..current]);
         current += 2;
-        var totalSize = size + Serializer.TerminatorBytes.Length;
+        var totalSize = size + Resp2Serializer.TerminatorBytes.Length;
 
         if (totalSize <= chunk.Length - current)
         {
