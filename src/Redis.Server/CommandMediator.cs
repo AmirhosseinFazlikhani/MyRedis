@@ -15,7 +15,8 @@ public class CommandMediator
             { "hello", new HelloCommandHandler() },
             { "get", new GetCommandHandler(clock) },
             { "set", new SetCommandHandler(clock) },
-            { "config", new ConfigCommandHandler(configuration) }
+            { "config", new ConfigCommandHandler(configuration) },
+            { "keys", new KeysCommandHandler() },
         };
     }
 

@@ -13,6 +13,7 @@
 
     <ItemGroup>
       <PackageReference Include="CommandLineParser" Version="2.9.1" />
+      <PackageReference Include="Glob" Version="1.1.9" />
     </ItemGroup>
 
 </Project>
