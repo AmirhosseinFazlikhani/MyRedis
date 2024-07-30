@@ -9,11 +9,15 @@ public class Connection : IDisposable
 {
     private readonly int _id;
     private readonly TcpClient _tcpClient;
+    private readonly CommandMediator _commandMediator;
 
-    public Connection(int id, TcpClient tcpClient)
+    public Connection(int id, 
+        TcpClient tcpClient,
+        CommandMediator commandMediator)
     {
         _id = id;
         _tcpClient = tcpClient;
+        _commandMediator = commandMediator;
     }
 
     public async Task StartAsync()
@@ -38,17 +42,17 @@ public class Connection : IDisposable
                 current++;
             }
 
-            var parametersCount = short.Parse(buffer.AsSpan(1..current));
+            var argsCount = short.Parse(buffer.AsSpan(1..current));
             current += 2;
-            var parameters = new string[parametersCount];
+            var args = new string[argsCount];
 
-            while (parametersCount > 0)
+            while (argsCount > 0)
             {
-                parameters[^parametersCount] = ReadBulkString(stream, buffer, ref current, ref readBytesCount);
-                parametersCount--;
+                args[^argsCount] = ReadBulkString(stream, buffer, ref current, ref readBytesCount);
+                argsCount--;
             }
 
-            var reply = CommandMediator.Send(parameters, new RequestContext { ConnectionId = _id });
+            var reply = _commandMediator.Send(args, new RequestContext { ConnectionId = _id });
             var serializedReply = (string)Resp2Serializer.Serialize((dynamic)reply);
             await stream.WriteAsync(Encoding.UTF8.GetBytes(serializedReply));
         }

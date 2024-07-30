@@ -3,20 +3,26 @@ using RESP.DataTypes;
 
 namespace Redis.Server;
 
-public static class CommandMediator
+public class CommandMediator
 {
-    private static readonly Dictionary<string, ICommandHandler> _handlers = new(StringComparer.OrdinalIgnoreCase)
-    {
-        { "ping", new PingCommandHandler() },
-        { "hello", new HelloCommandHandler() },
-        { "get", new GetCommandHandler(new Clock()) },
-        { "set", new SetCommandHandler(new Clock()) },
-    };
+    private readonly Dictionary<string, ICommandHandler> _handlers;
 
-    public static IRespData Send(string[] parameters, RequestContext context)
+    public CommandMediator(IClock clock, Configuration configuration)
     {
-        return _handlers.TryGetValue(parameters[0], out var handler)
-            ? handler.Handle(parameters, context)
-            : new RespSimpleError($"ERR unknown command '{parameters[0]}'");
+        _handlers = new Dictionary<string, ICommandHandler>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "ping", new PingCommandHandler() },
+            { "hello", new HelloCommandHandler() },
+            { "get", new GetCommandHandler(clock) },
+            { "set", new SetCommandHandler(clock) },
+            { "config", new ConfigCommandHandler(configuration) }
+        };
+    }
+
+    public IRespData Send(string[] args, RequestContext context)
+    {
+        return _handlers.TryGetValue(args[0], out var handler)
+            ? handler.Handle(args, context)
+            : new RespSimpleError($"ERR unknown command '{args[0]}'");
     }
 }
