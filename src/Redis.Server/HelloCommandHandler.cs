@@ -1,14 +1,14 @@
 ﻿using RESP.DataTypes;
 
-namespace Redis.Server.CommandHandlers;
+namespace Redis.Server;
 
-public class HelloCommandHandler : ICommandHandler
+public class HelloCommandHandler
 {
     private const int ProtoVersion = 2;
 
-    public IRespData Handle(string[] parameters, RequestContext context)
+    public static IRespData Handle(string[] args, Session session)
     {
-        if (parameters.Length == 2 && parameters[1] != ProtoVersion.ToString())
+        if (args.Length == 2 && args[1] != ProtoVersion.ToString())
         {
             return new RespSimpleError("NOPROTO sorry, this protocol version is not supported.");
         }
@@ -21,7 +21,7 @@ public class HelloCommandHandler : ICommandHandler
             new RespSimpleString("proto"),
             new RespInteger(ProtoVersion),
             new RespSimpleString("id"),
-            new RespInteger(context.ConnectionId),
+            new RespInteger(session.Id),
             new RespSimpleString("mode"),
             new RespSimpleString("standalone"),
             new RespSimpleString("role"),

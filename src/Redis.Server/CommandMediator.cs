@@ -1,29 +1,27 @@
-﻿using Redis.Server.CommandHandlers;
-using RESP.DataTypes;
+﻿using RESP.DataTypes;
 
 namespace Redis.Server;
 
-public class CommandMediator
+public class CommandMediator : ICommandMediator
 {
-    private readonly Dictionary<string, ICommandHandler> _handlers;
+    private readonly IClock _clock;
 
-    public CommandMediator(IClock clock, Configuration configuration)
+    public CommandMediator(IClock clock)
     {
-        _handlers = new Dictionary<string, ICommandHandler>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "ping", new PingCommandHandler() },
-            { "hello", new HelloCommandHandler() },
-            { "get", new GetCommandHandler(clock) },
-            { "set", new SetCommandHandler(clock) },
-            { "config", new ConfigCommandHandler(configuration) },
-            { "keys", new KeysCommandHandler() },
-        };
+        _clock = clock;
     }
 
-    public IRespData Send(string[] args, RequestContext context)
+    public IRespData Send(string[] args, Session session)
     {
-        return _handlers.TryGetValue(args[0], out var handler)
-            ? handler.Handle(args, context)
-            : new RespSimpleError($"ERR unknown command '{args[0]}'");
+        return args[0].ToLower() switch
+        {
+            "ping" => PingCommandHandler.Handle(args),
+            "hello" => HelloCommandHandler.Handle(args, session),
+            "get" => GetCommandHandler.Handle(args, _clock),
+            "set" => SetCommandHandler.Handle(args, _clock),
+            "config" => ConfigCommandHandler.Handle(args),
+            "keys" => KeysCommandHandler.Handle(args),
+            _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
+        };
     }
 }

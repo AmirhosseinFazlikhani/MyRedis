@@ -8,30 +8,47 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        var configuration = BuildConfiguration(args);
+        var parsedArgs = Parser.Default.ParseArguments<InputArgs>(args);
 
-        if (configuration is null)
+        if (parsedArgs.Errors.Any())
         {
             return;
+        }
+
+        if (parsedArgs.Value.Host is not null)
+        {
+            Configuration.Host = parsedArgs.Value.Host;
+        }
+
+        if (parsedArgs.Value.Port is not null)
+        {
+            Configuration.Port = parsedArgs.Value.Port.Value;
+        }
+
+        if (parsedArgs.Value.Directory is not null)
+        {
+            Configuration.Directory = parsedArgs.Value.Directory;
+        }
+
+        if (parsedArgs.Value.DbFileName is not null)
+        {
+            Configuration.DbFileName = parsedArgs.Value.DbFileName;
         }
 
         TcpListener? server = null;
 
         try
         {
-            server = new TcpListener(IPAddress.Parse(configuration.Host), configuration.Port);
+            server = new TcpListener(IPAddress.Parse(Configuration.Host), Configuration.Port);
             server.Start();
-            Console.WriteLine("Server is now listening on {0}:{1}", configuration.Host, configuration.Port);
-
-            var lastConnectionId = 0;
-            var commandMediator = new CommandMediator(new Clock(), configuration);
+            Console.WriteLine("Server is now listening on {0}:{1}", Configuration.Host, Configuration.Port);
 
             while (true)
             {
                 var client = await server.AcceptTcpClientAsync();
                 Console.WriteLine("New connection!");
 #pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                new Connection(++lastConnectionId, client, commandMediator).StartAsync();
+                SessionFactory.Create(new Clock(), client).StartAsync();
 #pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
             }
         }
@@ -48,38 +65,14 @@ class Program
         Console.Read();
     }
 
-    private static Configuration? BuildConfiguration(string[] args)
-    {
-        var options = Parser.Default.ParseArguments<InputArgs>(args);
-
-        if (options.Errors.Any())
-        {
-            return null;
-        }
-
-        var configuration = new Configuration
-        {
-            Host = options.Value.Host ?? "127.0.0.1",
-            Port = options.Value.Port ?? 6379,
-            Directory = options.Value.Directory ?? Path.Combine(Path.GetTempPath(), "redis-files"),
-            DbFileName = options.Value.DbFileName ?? "dump.rdb"
-        };
-
-        return configuration;
-    }
-
     class InputArgs
     {
-        [Option('p', "port")]
-        public int? Port { get; set; }
+        [Option('p', "port")] public int? Port { get; set; }
 
-        [Option('h', "host")]
-        public string? Host { get; set; }
+        [Option('h', "host")] public string? Host { get; set; }
 
-        [Option("dir")]
-        public string? Directory { get; set; }
+        [Option("dir")] public string? Directory { get; set; }
 
-        [Option("dbfilename")]
-        public string? DbFileName { get; set; }
+        [Option("dbfilename")] public string? DbFileName { get; set; }
     }
 }

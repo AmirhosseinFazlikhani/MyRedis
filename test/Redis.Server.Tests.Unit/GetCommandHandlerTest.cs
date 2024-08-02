@@ -1,9 +1,8 @@
 ﻿using AutoFixture;
 using NSubstitute;
-using Redis.Server.CommandHandlers;
 using RESP.DataTypes;
 
-namespace Redis.Server.Tests.Unit.CommandHandler;
+namespace Redis.Server.Tests.Unit;
 
 public class GetCommandHandlerTest
 {
@@ -12,8 +11,7 @@ public class GetCommandHandlerTest
     [Fact]
     public void Should_return_error_when_there_are_some_additional_arguments()
     {
-        var reply = new GetCommandHandler(new Clock())
-            .Handle(["GET", "foo", "LabLabLab"], new RequestContext());
+        var reply = GetCommandHandler.Handle(["GET", "foo", "LabLabLab"], new Clock());
 
         Assert.Equal(new RespSimpleError("ERR wrong number of arguments for 'GET' command"), reply);
     }
@@ -21,8 +19,7 @@ public class GetCommandHandlerTest
     [Fact]
     public void Should_return_null_when_key_does_not_exists()
     {
-        var reply = new GetCommandHandler(new Clock())
-            .Handle(["GET", _fixture.Create<string>()], new RequestContext());
+        var reply = GetCommandHandler.Handle(["GET", _fixture.Create<string>()], new Clock());
 
         Assert.Equal(new RespBulkString(null), reply);
     }
@@ -39,8 +36,7 @@ public class GetCommandHandlerTest
             Expiry = clock.Now().Subtract(TimeSpan.FromSeconds(1))
         };
 
-        var reply = new GetCommandHandler(clock)
-            .Handle(["GET", key], new RequestContext());
+        var reply = GetCommandHandler.Handle(["GET", key], new Clock());
 
         Assert.Equal(new RespBulkString(null), reply);
     }
@@ -57,7 +53,7 @@ public class GetCommandHandlerTest
             Expiry = clock.Now().Subtract(TimeSpan.FromSeconds(1))
         };
 
-        new GetCommandHandler(clock).Handle(["GET", key], new RequestContext());
+        GetCommandHandler.Handle(["GET", key], clock);
 
         Assert.False(DatabaseProvider.Database.ContainsKey(key));
     }
@@ -70,8 +66,7 @@ public class GetCommandHandlerTest
 
         DatabaseProvider.Database[key] = new Entry(value);
 
-        var reply = new GetCommandHandler(new Clock())
-            .Handle(["GET", key], new RequestContext());
+        var reply = GetCommandHandler.Handle(["GET", key], new Clock());
 
         Assert.Equal(new RespBulkString(value), reply);
     }

@@ -1,21 +1,14 @@
 ﻿using RESP.DataTypes;
 
-namespace Redis.Server.CommandHandlers;
+namespace Redis.Server;
 
-public class SetCommandHandler : ICommandHandler
+public class SetCommandHandler
 {
-    private readonly IClock _clock;
-
-    public SetCommandHandler(IClock clock)
+    public static IRespData Handle(string[] args, IClock clock)
     {
-        _clock = clock;
-    }
+        var entry = new Entry(args[2]);
 
-    public IRespData Handle(string[] parameters, RequestContext context)
-    {
-        var entry = new Entry(parameters[2]);
-
-        var options = parameters.AsSpan(3..);
+        var options = args.AsSpan(3..);
         var optionsCount = options.Length;
 
         if (optionsCount > 4)
@@ -43,7 +36,7 @@ public class SetCommandHandler : ICommandHandler
                     return ReplyHelper.SyntaxError();
                 }
 
-                entry.Expiry = _clock.Now().AddSeconds(seconds);
+                entry.Expiry = clock.Now().AddSeconds(seconds);
             }
             else if (options[currentOptionIndex].Equals("px", StringComparison.OrdinalIgnoreCase))
             {
@@ -59,7 +52,7 @@ public class SetCommandHandler : ICommandHandler
                     return ReplyHelper.SyntaxError();
                 }
 
-                entry.Expiry = _clock.Now().AddMilliseconds(milliseconds);
+                entry.Expiry = clock.Now().AddMilliseconds(milliseconds);
             }
             else if (options[currentOptionIndex].Equals("xx", StringComparison.OrdinalIgnoreCase))
             {
@@ -94,29 +87,29 @@ public class SetCommandHandler : ICommandHandler
         switch (setCond)
         {
             case SetCond.None:
-                SetValue(parameters[1], entry, keepTtl);
+                SetValue(args[1], entry, keepTtl, clock);
                 break;
             case SetCond.Exists:
-                lock (parameters[1])
+                lock (args[1])
                 {
-                    if (!DatabaseProvider.Database.TryGetValue(parameters[1], out var value) || value.IsExpired(_clock))
+                    if (!DatabaseProvider.Database.TryGetValue(args[1], out var value) || value.IsExpired(clock))
                     {
                         return new RespBulkString(null);
                     }
 
-                    SetValue(parameters[1], entry, keepTtl);
+                    SetValue(args[1], entry, keepTtl, clock);
                 }
 
                 break;
             case SetCond.NotExists:
-                lock (parameters[1])
+                lock (args[1])
                 {
-                    if (DatabaseProvider.Database.TryGetValue(parameters[1], out var value) && !value.IsExpired(_clock))
+                    if (DatabaseProvider.Database.TryGetValue(args[1], out var value) && !value.IsExpired(clock))
                     {
                         return new RespBulkString(null);
                     }
 
-                    SetValue(parameters[1], entry, keepTtl);
+                    SetValue(args[1], entry, keepTtl, clock);
                 }
 
                 break;
@@ -127,13 +120,13 @@ public class SetCommandHandler : ICommandHandler
         return ReplyHelper.OK();
     }
 
-    private void SetValue(string key, Entry entry, bool keepTtl)
+    private static void SetValue(string key, Entry entry, bool keepTtl, IClock clock)
     {
         if (keepTtl)
         {
             DatabaseProvider.Database.AddOrUpdate(key, entry, (_, oldEntry) =>
             {
-                if (!oldEntry.IsExpired(_clock))
+                if (!oldEntry.IsExpired(clock))
                 {
                     entry.Expiry = oldEntry.Expiry;
                 }

@@ -1,11 +1,11 @@
 ﻿using GlobExpressions;
 using RESP.DataTypes;
 
-namespace Redis.Server.CommandHandlers;
+namespace Redis.Server;
 
-public class KeysCommandHandler : ICommandHandler
+public class KeysCommandHandler
 {
-    public IRespData Handle(string[] parameters, RequestContext context)
+    public static IRespData Handle(string[] parameters)
     {
         if (parameters.Length != 2)
         {

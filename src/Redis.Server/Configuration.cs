@@ -2,11 +2,11 @@
 
 public class Configuration
 {
-    public required int Port { get; init; }
+    public static int Port { get; set; } = 6379;
 
-    public required string Host { get; init; }
+    public static string Host { get; set; } = "127.0.0.1";
 
-    public required string Directory { get; init; }
+    public static string Directory { get; set; } = Path.Combine(Path.GetTempPath(), "redis-files");
 
-    public required string DbFileName { get; init; }
+    public static string DbFileName { get; set; } = "dump.rdb";
 }
