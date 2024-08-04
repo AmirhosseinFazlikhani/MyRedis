@@ -17,7 +17,7 @@ public class GetCommandHandlerTest
     }
 
     [Fact]
-    public void Should_return_null_when_key_does_not_exists()
+    public void Should_return_null_when_key_not_found()
     {
         var reply = GetCommandHandler.Handle(["GET", _fixture.Create<string>()], new Clock());
 
@@ -31,10 +31,8 @@ public class GetCommandHandlerTest
         var clock = Substitute.For<IClock>();
         clock.Now().Returns(DateTime.UtcNow);
 
-        DatabaseProvider.Database[key] = new Entry(_fixture.Create<string>())
-        {
-            Expiry = clock.Now().Subtract(TimeSpan.FromSeconds(1))
-        };
+        DataStore.KeyValueStore[key] = _fixture.Create<string>();
+        DataStore.KeyExpiryStore[key] = clock.Now().Subtract(TimeSpan.FromSeconds(1));
 
         var reply = GetCommandHandler.Handle(["GET", key], new Clock());
 
@@ -48,23 +46,38 @@ public class GetCommandHandlerTest
         var clock = Substitute.For<IClock>();
         clock.Now().Returns(DateTime.UtcNow);
 
-        DatabaseProvider.Database[key] = new Entry(_fixture.Create<string>())
-        {
-            Expiry = clock.Now().Subtract(TimeSpan.FromSeconds(1))
-        };
+        DataStore.KeyValueStore[key] = _fixture.Create<string>();
+        DataStore.KeyExpiryStore[key] = clock.Now().Subtract(TimeSpan.FromSeconds(1));
 
         GetCommandHandler.Handle(["GET", key], clock);
 
-        Assert.False(DatabaseProvider.Database.ContainsKey(key));
+        Assert.False(DataStore.KeyValueStore.ContainsKey(key));
+        Assert.False(DataStore.KeyExpiryStore.ContainsKey(key));
     }
 
     [Fact]
-    public void Should_return_value_when_key_found_and_has_not_expired()
+    public void Should_return_value_when_key_found_and_has_no_expiry()
     {
         var key = _fixture.Create<string>();
         var value = _fixture.Create<string>();
 
-        DatabaseProvider.Database[key] = new Entry(value);
+        DataStore.KeyValueStore[key] = value;
+
+        var reply = GetCommandHandler.Handle(["GET", key], new Clock());
+
+        Assert.Equal(new RespBulkString(value), reply);
+    }
+
+    [Fact]
+    public void Should_return_value_when_key_found_and_has_time_to_live()
+    {
+        var key = _fixture.Create<string>();
+        var value = _fixture.Create<string>();
+        var clock = Substitute.For<IClock>();
+        clock.Now().Returns(DateTime.UtcNow);
+
+        DataStore.KeyValueStore[key] = value;
+        DataStore.KeyExpiryStore[key] = clock.Now().Add(TimeSpan.FromSeconds(1));
 
         var reply = GetCommandHandler.Handle(["GET", key], new Clock());
 

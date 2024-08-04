@@ -11,17 +11,24 @@ public class GetCommandHandler
             return ReplyHelper.WrongArgumentsNumberError("GET");
         }
 
-        if (!DatabaseProvider.Database.TryGetValue(args[1], out var value))
+        var key = args[1];
+
+        if (!DataStore.KeyValueStore.TryGetValue(key, out var value))
         {
             return new RespBulkString(null);
         }
 
-        if (value.IsExpired(clock))
+        if (DataStore.KeyExpiryStore.TryGetValue(key, out var expiry) && expiry < clock.Now())
         {
-            DatabaseProvider.Database.Remove(args[1], out _);
+            lock (key)
+            {
+                DataStore.KeyValueStore.Remove(key, out _);
+                DataStore.KeyExpiryStore.Remove(key, out _);
+            }
+            
             return new RespBulkString(null);
         }
 
-        return new RespBulkString(value.Value);
+        return new RespBulkString(value);
     }
 }

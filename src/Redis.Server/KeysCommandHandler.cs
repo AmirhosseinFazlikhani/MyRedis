@@ -12,7 +12,7 @@ public class KeysCommandHandler
             return ReplyHelper.WrongArgumentsNumberError("KEYS");
         }
 
-        var keys = DatabaseProvider.Database.Keys.Where(k => Glob.IsMatch(k, parameters[1]))
+        var keys = DataStore.KeyValueStore.Keys.Where(k => Glob.IsMatch(k, parameters[1]))
             .Select(k => new RespBulkString(k) as IRespData)
             .ToArray();
 

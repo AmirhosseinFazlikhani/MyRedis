@@ -6,7 +6,9 @@ public class SetCommandHandler
 {
     public static IRespData Handle(string[] args, IClock clock)
     {
-        var entry = new Entry(args[2]);
+        var key = args[1];
+        var value = args[2];
+        DateTime? expiry = null;
 
         var options = args.AsSpan(3..);
         var optionsCount = options.Length;
@@ -31,12 +33,12 @@ public class SetCommandHandler
                     return ReplyHelper.IntegerParsingError();
                 }
 
-                if (entry.Expiry.HasValue)
+                if (expiry.HasValue)
                 {
                     return ReplyHelper.SyntaxError();
                 }
 
-                entry.Expiry = clock.Now().AddSeconds(seconds);
+                expiry = clock.Now().AddSeconds(seconds);
             }
             else if (options[currentOptionIndex].Equals("px", StringComparison.OrdinalIgnoreCase))
             {
@@ -47,12 +49,12 @@ public class SetCommandHandler
                     return ReplyHelper.IntegerParsingError();
                 }
 
-                if (entry.Expiry.HasValue)
+                if (expiry.HasValue)
                 {
                     return ReplyHelper.SyntaxError();
                 }
 
-                entry.Expiry = clock.Now().AddMilliseconds(milliseconds);
+                expiry = clock.Now().AddMilliseconds(milliseconds);
             }
             else if (options[currentOptionIndex].Equals("xx", StringComparison.OrdinalIgnoreCase))
             {
@@ -84,59 +86,66 @@ public class SetCommandHandler
             currentOptionIndex++;
         }
 
+        Monitor.Enter(key);
         switch (setCond)
         {
             case SetCond.None:
-                SetValue(args[1], entry, keepTtl, clock);
+                SetValue();
                 break;
             case SetCond.Exists:
-                lock (args[1])
+                if (!KeyExists())
                 {
-                    if (!DatabaseProvider.Database.TryGetValue(args[1], out var value) || value.IsExpired(clock))
-                    {
-                        return new RespBulkString(null);
-                    }
-
-                    SetValue(args[1], entry, keepTtl, clock);
+                    return new RespBulkString(null);
                 }
 
+                SetValue();
                 break;
             case SetCond.NotExists:
-                lock (args[1])
+                if (KeyExists())
                 {
-                    if (DatabaseProvider.Database.TryGetValue(args[1], out var value) && !value.IsExpired(clock))
-                    {
-                        return new RespBulkString(null);
-                    }
-
-                    SetValue(args[1], entry, keepTtl, clock);
+                    return new RespBulkString(null);
                 }
 
+                SetValue();
                 break;
             default:
                 throw new ArgumentOutOfRangeException();
         }
 
+        Monitor.Exit(key);
+
         return ReplyHelper.OK();
-    }
 
-    private static void SetValue(string key, Entry entry, bool keepTtl, IClock clock)
-    {
-        if (keepTtl)
+        void SetValue()
         {
-            DatabaseProvider.Database.AddOrUpdate(key, entry, (_, oldEntry) =>
+            DataStore.KeyValueStore[key] = value;
+
+            if (!keepTtl)
             {
-                if (!oldEntry.IsExpired(clock))
-                {
-                    entry.Expiry = oldEntry.Expiry;
-                }
-
-                return entry;
-            });
+                SetExpiry();
+            }
+            else if(DataStore.KeyExpiryStore.TryGetValue(key, out var oldExpiry) && oldExpiry < clock.Now())
+            {
+                SetExpiry();
+            }
         }
-        else
+
+        void SetExpiry()
         {
-            DatabaseProvider.Database[key] = entry;
+            if (expiry.HasValue)
+            {
+                DataStore.KeyExpiryStore[key] = expiry.Value;
+            }
+            else
+            {
+                DataStore.KeyExpiryStore.TryRemove(key, out _);
+            }
+        }
+
+        bool KeyExists()
+        {
+            return DataStore.KeyValueStore.ContainsKey(key) &&
+                (!DataStore.KeyExpiryStore.TryGetValue(key, out var currentExpiry) || currentExpiry >= clock.Now());
         }
     }
 }
