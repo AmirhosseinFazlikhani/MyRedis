@@ -86,7 +86,6 @@ public class SetCommandHandler
             currentOptionIndex++;
         }
 
-        Monitor.Enter(key);
         switch (setCond)
         {
             case SetCond.None:
@@ -112,8 +111,6 @@ public class SetCommandHandler
                 throw new ArgumentOutOfRangeException();
         }
 
-        Monitor.Exit(key);
-
         return ReplyHelper.OK();
 
         void SetValue()
@@ -122,23 +119,18 @@ public class SetCommandHandler
 
             if (!keepTtl)
             {
-                SetExpiry();
+                if (expiry.HasValue)
+                {
+                    DataStore.KeyExpiryStore[key] = expiry.Value;
+                }
+                else
+                {
+                    DataStore.KeyExpiryStore.TryRemove(key, out _);
+                }
             }
             else if(DataStore.KeyExpiryStore.TryGetValue(key, out var oldExpiry) && oldExpiry < clock.Now())
             {
-                SetExpiry();
-            }
-        }
-
-        void SetExpiry()
-        {
-            if (expiry.HasValue)
-            {
-                DataStore.KeyExpiryStore[key] = expiry.Value;
-            }
-            else
-            {
-                DataStore.KeyExpiryStore.TryRemove(key, out _);
+                DataStore.KeyExpiryStore.TryRemove(new(key, oldExpiry));
             }
         }
 

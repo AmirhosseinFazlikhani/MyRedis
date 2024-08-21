@@ -137,7 +137,7 @@ public class SetCommandHandlerTest
         var expectedExpiry = clock2.Now().AddSeconds(expectedTtl);
 
         var reply1 = SetCommandHandler.Handle(["SET", key, oldValue, "EX", oldTtl.ToString()], clock1);
-        var reply2 = SetCommandHandler.Handle(["SET", key, newValue, "EX", expectedTtl.ToString(), "KEEPTTL"], clock2);
+        var reply2 = SetCommandHandler.Handle(["SET", key, newValue, "EX", expectedTtl.ToString()], clock2);
 
         Assert.Equal(new RespSimpleString("OK"), reply1);
         Assert.Equal(new RespSimpleString("OK"), reply2);

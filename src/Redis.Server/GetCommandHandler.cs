@@ -20,12 +20,11 @@ public class GetCommandHandler
 
         if (DataStore.KeyExpiryStore.TryGetValue(key, out var expiry) && expiry < clock.Now())
         {
-            lock (key)
+            if (DataStore.KeyValueStore.TryRemove(new(key, value)))
             {
-                DataStore.KeyValueStore.Remove(key, out _);
-                DataStore.KeyExpiryStore.Remove(key, out _);
+                DataStore.KeyExpiryStore.TryRemove(new(key, expiry));
             }
-            
+
             return new RespBulkString(null);
         }
 
