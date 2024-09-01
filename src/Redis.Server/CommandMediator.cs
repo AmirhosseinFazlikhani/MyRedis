@@ -25,6 +25,7 @@ public class CommandMediator : ICommandMediator
                     "set" => SetCommandHandler.Handle(args, _clock),
                     "config" => ConfigCommandHandler.Handle(args),
                     "keys" => KeysCommandHandler.Handle(args),
+                    "expire" => ExpireCommandHandler.Handle(args, _clock),
                     _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
                 };
             }
