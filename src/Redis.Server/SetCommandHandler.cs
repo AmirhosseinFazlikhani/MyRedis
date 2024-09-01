@@ -92,7 +92,7 @@ public class SetCommandHandler
                 SetValue();
                 break;
             case SetCond.Exists:
-                if (!KeyExists())
+                if (!DataStore.ContainsKey(key, clock))
                 {
                     return new RespBulkString(null);
                 }
@@ -100,7 +100,7 @@ public class SetCommandHandler
                 SetValue();
                 break;
             case SetCond.NotExists:
-                if (KeyExists())
+                if (DataStore.ContainsKey(key, clock))
                 {
                     return new RespBulkString(null);
                 }
@@ -125,19 +125,13 @@ public class SetCommandHandler
                 }
                 else
                 {
-                    DataStore.KeyExpiryStore.TryRemove(key, out _);
+                    DataStore.KeyExpiryStore.Remove(key);
                 }
             }
             else if(DataStore.KeyExpiryStore.TryGetValue(key, out var oldExpiry) && oldExpiry < clock.Now())
             {
-                DataStore.KeyExpiryStore.TryRemove(new(key, oldExpiry));
+                DataStore.KeyExpiryStore.Remove(key);
             }
-        }
-
-        bool KeyExists()
-        {
-            return DataStore.KeyValueStore.ContainsKey(key) &&
-                (!DataStore.KeyExpiryStore.TryGetValue(key, out var currentExpiry) || currentExpiry >= clock.Now());
         }
     }
 }
