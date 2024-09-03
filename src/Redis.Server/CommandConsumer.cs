@@ -20,20 +20,10 @@ public class CommandConsumer : ICommandConsumer, IDisposable
         _commandQueue.Add((args, client));
     }
 
-    private bool _started;
     private bool _disposed;
     
     private void Start()
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        
-        if (_started)
-        {
-            throw new NotSupportedException("Already started");
-        }
-
-        _started = true;
-
         Task.Run(async () =>
         {
             foreach (var (data, client) in _replyQueue.GetConsumingEnumerable())
