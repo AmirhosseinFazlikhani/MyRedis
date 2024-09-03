@@ -40,25 +40,27 @@ class Program
         try
         {
             var clock = new Clock();
-            
             Persistence.Load(clock);
             
             server = new TcpListener(IPAddress.Parse(Configuration.Host), Configuration.Port);
             server.Start();
             Console.WriteLine("Server is now listening on {0}:{1}", Configuration.Host, Configuration.Port);
+            
+            using var commandMediator = new CommandConsumer(clock);
 
+            var lastClientId = 0;
+            
             while (true)
             {
-                var client = await server.AcceptTcpClientAsync();
-                Console.WriteLine("New connection!");
-#pragma warning disable CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
-                SessionFactory.Create(clock, client).StartAsync();
-#pragma warning restore CS4014 // Because this call is not awaited, execution of the current method continues before the call is completed
+                var tcpClient = await server.AcceptTcpClientAsync();
+                Console.WriteLine("SS");
+                var client = new Client(++lastClientId, tcpClient, commandMediator);
+                client.Start();
             }
         }
-        catch (SocketException e)
+        catch (Exception e)
         {
-            Console.WriteLine("SocketException: {0}", e);
+            Console.WriteLine("Exception: {0}", e);
         }
         finally
         {

@@ -6,7 +6,7 @@ public class HelloCommandHandler
 {
     private const int ProtoVersion = 2;
 
-    public static IRespData Handle(string[] args, Session session)
+    public static IRespData Handle(string[] args, Client client)
     {
         if (args.Length == 2 && args[1] != ProtoVersion.ToString())
         {
@@ -21,7 +21,7 @@ public class HelloCommandHandler
             new RespSimpleString("proto"),
             new RespInteger(ProtoVersion),
             new RespSimpleString("id"),
-            new RespInteger(session.Id),
+            new RespInteger(client.Id),
             new RespSimpleString("mode"),
             new RespSimpleString("standalone"),
             new RespSimpleString("role"),

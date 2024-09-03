@@ -2,7 +2,6 @@
 
 public static class DataStore
 {
-    public static readonly object Lock = new();
     public static readonly Dictionary<string, string> KeyValueStore = new();
     public static readonly Dictionary<string, DateTime> KeyExpiryStore = new();
 
