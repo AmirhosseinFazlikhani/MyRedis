@@ -53,7 +53,6 @@ class Program
             while (true)
             {
                 var tcpClient = await server.AcceptTcpClientAsync();
-                Console.WriteLine("SS");
                 var client = new Client(++lastClientId, tcpClient, commandMediator);
                 client.Start();
             }
