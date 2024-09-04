@@ -6,32 +6,21 @@ namespace Redis.Server;
 public class CommandConsumer : ICommandConsumer, IDisposable
 {
     private readonly IClock _clock;
-    private readonly BlockingCollection<(string[] args, ClientConnection client)> _commandQueue = new();
-    private readonly BlockingCollection<(IRespData data, ClientConnection client)> _replyQueue = new();
-    
+    private readonly BlockingCollection<(string[] args, ClientConnection sender)> _commandQueue = new();
+
     public CommandConsumer(IClock clock)
     {
         _clock = clock;
         Start();
     }
 
-    public void Add(string[] args, ClientConnection client)
+    public void Add(string[] args, ClientConnection sender)
     {
-        _commandQueue.Add((args, client));
+        _commandQueue.Add((args, sender));
     }
 
-    private bool _disposed;
-    
     private void Start()
     {
-        Task.Run(async () =>
-        {
-            foreach (var (data, client) in _replyQueue.GetConsumingEnumerable())
-            {
-                await client.ReplyAsync(data);
-            }
-        });
-
         Task.Factory.StartNew(() =>
             {
                 foreach (var (args, client) in _commandQueue.GetConsumingEnumerable())
@@ -39,16 +28,14 @@ public class CommandConsumer : ICommandConsumer, IDisposable
                     try
                     {
                         var reply = HandleCommand(args, client);
-                        _replyQueue.Add((reply, client));
+                        client.Reply(reply);
                     }
                     catch
                     {
                         var reply = new RespSimpleError("ERR internal error");
-                        _replyQueue.Add((reply, client));
+                        client.Reply(reply);
                     }
                 }
-                
-                _replyQueue.CompleteAdding();
             },
             TaskCreationOptions.LongRunning);
     }
@@ -67,13 +54,6 @@ public class CommandConsumer : ICommandConsumer, IDisposable
 
     public void Dispose()
     {
-        if (_disposed)
-        {
-            return;
-        }
-        
         _commandQueue.Dispose();
-        _replyQueue.Dispose();
-        _disposed = true;
     }
 }

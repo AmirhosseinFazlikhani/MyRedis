@@ -21,7 +21,7 @@ public static class ClientManager
                 _clients.Add(client);
             }
             
-            _ = client.ListenAsync().ContinueWith(_ =>
+            _ = client.StartAsync().ContinueWith(_ =>
             {
                 lock (_clientsLock)
                 {

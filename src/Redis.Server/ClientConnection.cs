@@ -23,8 +23,11 @@ public class ClientConnection : IDisposable
     private bool _disposed;
     private readonly TcpClient _tcpClient;
     private readonly ICommandConsumer _commandConsumer;
+    private readonly SemaphoreSlim _semaphore = new( 0);
 
-    public async Task ListenAsync()
+    private IRespData? _reply;
+    
+    public async Task StartAsync()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -37,7 +40,7 @@ public class ClientConnection : IDisposable
 
         int readBytesCount;
         var buffer = ArrayPool<byte>.Shared.Rent(1024);
-
+        
         try
         {
             while ((readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer)) != 0)
@@ -64,6 +67,10 @@ public class ClientConnection : IDisposable
                 }
 
                 _commandConsumer.Add(args, this);
+                await _semaphore.WaitAsync();
+                var serializedData = (string)Resp2Serializer.Serialize((dynamic)_reply!);
+                await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedData));
+                _reply = null;
             }
         }
         finally
@@ -110,11 +117,10 @@ public class ClientConnection : IDisposable
         }
     }
 
-    public async Task ReplyAsync(IRespData data)
+    public void Reply(IRespData data)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
-        var serializedData = (string)Resp2Serializer.Serialize((dynamic)data);
-        await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedData));
+        _reply = data;
+        _semaphore.Release();
     }
 
     public void Dispose()
