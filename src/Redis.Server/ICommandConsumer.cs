@@ -2,5 +2,5 @@
 
 public interface ICommandConsumer
 {
-    void Add(string[] args, Client client);
+    void Add(string[] args, ClientConnection client);
 }

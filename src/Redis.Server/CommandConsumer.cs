@@ -6,8 +6,8 @@ namespace Redis.Server;
 public class CommandConsumer : ICommandConsumer, IDisposable
 {
     private readonly IClock _clock;
-    private readonly BlockingCollection<(string[] args, Client client)> _commandQueue = new();
-    private readonly BlockingCollection<(IRespData data, Client client)> _replyQueue = new();
+    private readonly BlockingCollection<(string[] args, ClientConnection client)> _commandQueue = new();
+    private readonly BlockingCollection<(IRespData data, ClientConnection client)> _replyQueue = new();
     
     public CommandConsumer(IClock clock)
     {
@@ -15,7 +15,7 @@ public class CommandConsumer : ICommandConsumer, IDisposable
         Start();
     }
 
-    public void Add(string[] args, Client client)
+    public void Add(string[] args, ClientConnection client)
     {
         _commandQueue.Add((args, client));
     }
@@ -53,7 +53,7 @@ public class CommandConsumer : ICommandConsumer, IDisposable
             TaskCreationOptions.LongRunning);
     }
 
-    private IRespData HandleCommand(string[] args, Client client) => args[0].ToLower() switch
+    private IRespData HandleCommand(string[] args, ClientConnection client) => args[0].ToLower() switch
     {
         "ping" => PingCommandHandler.Handle(args),
         "hello" => HelloCommandHandler.Handle(args, client),

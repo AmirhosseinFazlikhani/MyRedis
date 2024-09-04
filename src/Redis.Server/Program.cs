@@ -47,15 +47,7 @@ class Program
             Console.WriteLine("Server is now listening on {0}:{1}", Configuration.Host, Configuration.Port);
             
             using var commandMediator = new CommandConsumer(clock);
-
-            var lastClientId = 0;
-            
-            while (true)
-            {
-                var tcpClient = await server.AcceptTcpClientAsync();
-                var client = new Client(++lastClientId, tcpClient, commandMediator);
-                client.Start();
-            }
+            await ClientManager.AcceptClientAsync(server, commandMediator);
         }
         catch (Exception e)
         {
