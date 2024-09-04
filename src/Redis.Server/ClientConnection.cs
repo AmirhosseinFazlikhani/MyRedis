@@ -1,5 +1,4 @@
-﻿using System.Buffers;
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using System.Text;
 using RESP;
 using RESP.DataTypes;
@@ -23,10 +22,11 @@ public class ClientConnection : IDisposable
     private bool _disposed;
     private readonly TcpClient _tcpClient;
     private readonly ICommandConsumer _commandConsumer;
-    private readonly SemaphoreSlim _semaphore = new( 0);
+    private readonly SemaphoreSlim _semaphore = new(0);
 
-    private IRespData? _reply;
-    
+    private readonly List<string[]> _commandQueue = new();
+    private readonly List<IRespData> _replyQueue = new();
+
     public async Task StartAsync()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -39,47 +39,85 @@ public class ClientConnection : IDisposable
         _started = true;
 
         int readBytesCount;
-        var buffer = ArrayPool<byte>.Shared.Rent(1024);
-        
+        var buffer = new byte[1024];
+
         try
         {
-            while ((readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer)) != 0)
+            while (await ReadPipeline())
             {
-                if (buffer[0] != '*')
+                foreach (var command in _commandQueue)
                 {
-                    throw new ProtocolErrorException();
+                    _commandConsumer.Add(command, this);
                 }
 
-                var current = 1;
-                while (buffer[current] != '\r')
-                {
-                    current++;
-                }
-
-                var argsCount = short.Parse(buffer.AsSpan(1..current));
-                current += 2;
-                var args = new string[argsCount];
-
-                while (argsCount > 0)
-                {
-                    args[^argsCount] = ReadBulkString(ref current);
-                    argsCount--;
-                }
-
-                _commandConsumer.Add(args, this);
                 await _semaphore.WaitAsync();
-                var serializedData = (string)Resp2Serializer.Serialize((dynamic)_reply!);
-                await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedData));
-                _reply = null;
+
+                var serializedReplies = _replyQueue.Aggregate(string.Empty,
+                    (current, reply) => current + (string)Resp2Serializer.Serialize((dynamic)reply));
+
+                await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedReplies));
+
+                _commandQueue.Clear();
+                _replyQueue.Clear();
             }
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(buffer);
             Dispose();
         }
 
         return;
+
+        async Task<bool> ReadPipeline()
+        {
+            while ((readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer)) != 0)
+            {
+                var offset = 0;
+
+                while (offset < readBytesCount)
+                {
+                    var args = ReadCommand(ref offset);
+                    _commandQueue.Add(args);
+                }
+
+                if (_tcpClient.GetStream().DataAvailable)
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+
+        string[] ReadCommand(ref int offset)
+        {
+            if (buffer[offset] != '*')
+            {
+                throw new ProtocolErrorException();
+            }
+
+            offset++;
+            var argsCountOffset = offset;
+
+            while (buffer[offset] != '\r')
+            {
+                offset++;
+            }
+
+            var argsCount = short.Parse(buffer.AsSpan(argsCountOffset..offset));
+            offset += 2;
+            var args = new string[argsCount];
+
+            while (argsCount > 0)
+            {
+                args[^argsCount] = ReadBulkString(ref offset);
+                argsCount--;
+            }
+
+            return args;
+        }
 
         string ReadBulkString(ref int offset)
         {
@@ -119,8 +157,12 @@ public class ClientConnection : IDisposable
 
     public void Reply(IRespData data)
     {
-        _reply = data;
-        _semaphore.Release();
+        _replyQueue.Add(data);
+
+        if (_commandQueue.Count == _replyQueue.Count)
+        {
+            _semaphore.Release();
+        }
     }
 
     public void Dispose()
