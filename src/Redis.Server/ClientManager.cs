@@ -20,11 +20,16 @@ public static class ClientManager
             {
                 _clients.Add(client);
             }
-            
-            _ = client.StartAsync().ContinueWith(_ =>
+
+            _ = client.StartAsync().ContinueWith(t =>
             {
                 lock (_clientsLock)
                 {
+                    if (t.Status == TaskStatus.Faulted)
+                    {
+                        Console.Error.Write("Client {0}: {1}", client.ClientId, t.Exception);
+                    }
+
                     _clients.Remove(client);
                 }
             });

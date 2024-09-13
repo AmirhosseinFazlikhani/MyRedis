@@ -1,4 +1,5 @@
-﻿using System.Net.Sockets;
+﻿using System.Buffers;
+using System.Net.Sockets;
 using System.Text;
 using RESP;
 using RESP.DataTypes;
@@ -7,6 +8,15 @@ namespace Redis.Server;
 
 public class ClientConnection : IDisposable
 {
+    private bool _started;
+    private bool _disposed;
+    private readonly TcpClient _tcpClient;
+    private readonly ICommandConsumer _commandConsumer;
+    private readonly SemaphoreSlim _semaphore = new(0);
+    private readonly List<string[]> _commandQueue = new();
+    private readonly List<IRespData> _replyQueue = new();
+    private static readonly ArrayPool<byte> _arrayPool = ArrayPool<byte>.Create();
+
     public ClientConnection(int clientId,
         TcpClient tcpClient,
         ICommandConsumer commandConsumer)
@@ -17,15 +27,6 @@ public class ClientConnection : IDisposable
     }
 
     public int ClientId { get; }
-
-    private bool _started;
-    private bool _disposed;
-    private readonly TcpClient _tcpClient;
-    private readonly ICommandConsumer _commandConsumer;
-    private readonly SemaphoreSlim _semaphore = new(0);
-
-    private readonly List<string[]> _commandQueue = new();
-    private readonly List<IRespData> _replyQueue = new();
 
     public async Task StartAsync()
     {
@@ -38,8 +39,8 @@ public class ClientConnection : IDisposable
 
         _started = true;
 
-        int readBytesCount;
-        var buffer = new byte[1024];
+        int offset;
+        var buffer = _arrayPool.Rent(256);
 
         try
         {
@@ -63,6 +64,7 @@ public class ClientConnection : IDisposable
         }
         finally
         {
+            _arrayPool.Return(buffer);
             Dispose();
         }
 
@@ -70,88 +72,109 @@ public class ClientConnection : IDisposable
 
         async Task<bool> ReadPipeline()
         {
-            while ((readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer)) != 0)
+            offset = 0;
+
+            try
             {
-                var offset = 0;
+                var readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer);
+
+                if (readBytesCount == 0)
+                {
+                    return false;
+                }
+
+                while (_tcpClient.GetStream().DataAvailable)
+                {
+                    var newBufferSize = buffer.Length * 2;
+
+                    if (newBufferSize < 0)
+                    {
+                        newBufferSize = int.MaxValue;
+                    }
+
+                    var newBuffer = _arrayPool.Rent(newBufferSize);
+                    Array.Copy(buffer, newBuffer, buffer.Length);
+                    _arrayPool.Return(buffer);
+                    buffer = newBuffer;
+
+                    readBytesCount += await _tcpClient.GetStream()
+                        .ReadAsync(buffer.AsMemory(readBytesCount));
+                }
 
                 while (offset < readBytesCount)
                 {
-                    var args = ReadCommand(ref offset);
+                    var args = ReadStringArray();
                     _commandQueue.Add(args);
-                }
-
-                if (_tcpClient.GetStream().DataAvailable)
-                {
-                    continue;
                 }
 
                 return true;
             }
-
-            return false;
+            catch (IOException e)
+                when (e.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionReset })
+            {
+                return false;
+            }
+            finally
+            {
+                _arrayPool.Return(buffer);
+            }
         }
 
-        string[] ReadCommand(ref int offset)
+        string[] ReadStringArray()
         {
-            if (buffer[offset] != '*')
+            if (buffer[offset] != RespArray.Prefix)
             {
-                throw new ProtocolErrorException();
+                throw new ProtocolException();
             }
 
             offset++;
-            var argsCountOffset = offset;
+            var argsCountStartIndex = offset;
 
             while (buffer[offset] != '\r')
             {
                 offset++;
             }
 
-            var argsCount = short.Parse(buffer.AsSpan(argsCountOffset..offset));
+            var argsCount = short.Parse(buffer.AsSpan(argsCountStartIndex..offset));
             offset += 2;
             var args = new string[argsCount];
 
             while (argsCount > 0)
             {
-                args[^argsCount] = ReadBulkString(ref offset);
+                args[^argsCount] = ReadBulkString();
                 argsCount--;
             }
 
             return args;
         }
 
-        string ReadBulkString(ref int offset)
+        string ReadBulkString()
         {
-            if (offset == readBytesCount)
+            if (buffer[offset] != RespBulkString.Prefix)
             {
-                offset = 0;
-                readBytesCount = _tcpClient.GetStream().Read(buffer);
+                throw new ProtocolException();
             }
 
-            var chunk = buffer.AsSpan(offset..readBytesCount);
+            offset++;
+            var sizeStartIndex = offset;
 
-            var current = 1;
-            while (chunk[current] != '\r')
+            while (buffer[offset] != '\r')
             {
-                current++;
+                offset++;
             }
 
-            var size = int.Parse(chunk[1..current]);
-            current += 2;
-            var totalSize = size + Resp2Serializer.TerminatorBytes.Length;
+            var stringSize = int.Parse(buffer.AsSpan(sizeStartIndex..offset));
+            offset += Resp2Serializer.TerminatorBytes.Length;
 
-            if (totalSize <= chunk.Length - current)
+            if (stringSize == 0)
             {
-                offset += totalSize + current;
-                return Encoding.UTF8.GetString(chunk[current..(size + current)]);
+                offset += Resp2Serializer.TerminatorBytes.Length;
+                return string.Empty;
             }
 
-            var result = new byte[size];
-            chunk[current..].CopyTo(result);
-            var remainingBytesCount = totalSize - chunk.Length - current;
-            _ = _tcpClient.GetStream().Read(result, chunk.Length - current, remainingBytesCount);
-            offset = readBytesCount = buffer.Length - 1;
-
-            return Encoding.UTF8.GetString(result);
+            var result = Encoding.UTF8.GetString(buffer.AsSpan(offset, stringSize));
+            offset += stringSize + Resp2Serializer.TerminatorBytes.Length;
+            return result;
         }
     }
 

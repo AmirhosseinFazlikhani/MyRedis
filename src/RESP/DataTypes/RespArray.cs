@@ -2,5 +2,5 @@
 
 public record RespArray(IRespData[] Items) : IRespData
 {
-    public const string Prefix = "*";
+    public const char Prefix = '*';
 }

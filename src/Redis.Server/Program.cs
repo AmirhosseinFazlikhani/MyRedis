@@ -51,7 +51,7 @@ class Program
         }
         catch (Exception e)
         {
-            Console.WriteLine("Exception: {0}", e);
+            Console.Error.WriteLine(e);
         }
         finally
         {
