@@ -46,17 +46,26 @@ public class CommandConsumer : ICommandConsumer, IDisposable
         "hello" => HelloCommandHandler.Handle(args, client),
         "get" => GetCommandHandler.Handle(args, _clock),
         "set" => SetCommandHandler.Handle(args, _clock),
-        "config" => ConfigGetCommandHandler.Handle(args),
+        "config" => args[1].ToLower() switch
+        {
+            "get" => ConfigGetCommandHandler.Handle(args),
+            _ => UnknownSubcommand(args[1])
+        },
         "keys" => KeysCommandHandler.Handle(args),
         "expire" => ExpireCommandHandler.Handle(args, _clock),
         "client" => args[1].ToLower() switch
         {
             "setname" => ClientSetNameCommandHandler.Handle(args, client),
             "getname" => ClientGetNameCommandHandler.Handle(args, client),
-            _ => new RespSimpleError($"ERR unknown subcommand '{args[1]}'")
+            _ => UnknownSubcommand(args[1])
         },
         _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
     };
+
+    private static RespSimpleError UnknownSubcommand(string subcommand)
+    {
+        return new RespSimpleError($"ERR unknown subcommand '{subcommand}'");
+    }
 
     public void Dispose()
     {
