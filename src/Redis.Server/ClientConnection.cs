@@ -8,6 +8,8 @@ namespace Redis.Server;
 
 public class ClientConnection : IDisposable
 {
+    public readonly int ClientId;
+    public string ClientName;
     private bool _started;
     private bool _disposed;
     private readonly TcpClient _tcpClient;
@@ -22,11 +24,10 @@ public class ClientConnection : IDisposable
         ICommandConsumer commandConsumer)
     {
         ClientId = clientId;
+        ClientName = string.Empty;
         _tcpClient = tcpClient;
         _commandConsumer = commandConsumer;
     }
-
-    public int ClientId { get; }
 
     public async Task StartAsync()
     {
