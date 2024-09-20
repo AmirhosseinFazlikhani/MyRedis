@@ -4,9 +4,38 @@ namespace Redis.Server;
 
 public static class Persistence
 {
+    private const byte EndMetadataFlag = 0xFE;
+    private const byte StartDbFlag = 0xFB;
+    private const byte EndDbFlag = 0xFF;
+    private const byte StringValueFlag = 0;
+    private const byte ExpiryInSecondsFlag = 0xFD;
+    private const byte ExpiryInMillisecondsFlag = 0xFC;
+    private const int DbNumber = 0;
+    
+    private static readonly byte[] Header = "REDIS"u8.ToArray();
+    private static readonly byte[] Version = "0009"u8.ToArray();
+
+    public static void Save(IClock clock,
+        Dictionary<string, string> keyValueStore,
+        Dictionary<string, DateTime> keyExpiryStore)
+    {
+        var path = GetDbFilePath();
+        var file = File.OpenWrite(path);
+        using var writer = new BinaryWriter(file, leaveOpen: false, encoding: new UTF8Encoding(false));
+        writer.Write(Header);
+        writer.Write(Version);
+        writer.Write(EndMetadataFlag);
+        WriteLength(writer, DbNumber);
+        writer.Write(StartDbFlag);
+        WriteLength(writer, keyValueStore.Count);
+        WriteLength(writer, keyExpiryStore.Count);
+        WriteDataStore(writer, clock, keyValueStore, keyExpiryStore);
+        writer.Write(EndDbFlag);
+    }
+
     public static void Load(IClock clock)
     {
-        var path = Path.Combine(Configuration.Directory, Configuration.DbFileName);
+        var path = GetDbFilePath();
 
         if (!File.Exists(path))
         {
@@ -16,68 +45,71 @@ public static class Persistence
         var file = File.OpenRead(path);
         using var reader = new BinaryReader(file);
 
-        if (Encoding.UTF8.GetString(reader.ReadBytes(5)) != "REDIS")
+        if (!reader.ReadBytes(5).SequenceEqual(Header))
         {
             throw new FormatException("Rdb file format is invalid.");
         }
 
-        var version = int.Parse(Encoding.ASCII.GetString(reader.ReadBytes(4)));
-
-        if (version != 9)
+        if (!reader.ReadBytes(4).SequenceEqual(Version))
         {
             throw new NotSupportedException("Rdb file version is unsupported.");
         }
 
-        while (reader.ReadByte() != 0xFE)
+        while (reader.ReadByte() != EndMetadataFlag)
         {
         }
 
         var databaseNumber = ReadLength(reader);
 
-        if (databaseNumber != 0)
+        if (databaseNumber != DbNumber)
         {
             throw new NotSupportedException("Multi database feature is unsupported.");
         }
 
-        if (file.ReadByte() != 0xFB)
+        if (file.ReadByte() != StartDbFlag)
         {
             throw new FormatException("Rdb file format is invalid.");
         }
 
-        var keyValueHashTableSize = ReadLength(reader);
-        var keyExpiryHashTableSize = ReadLength(reader);
+        // KeyValueHashTableSize
+        _ = ReadLength(reader);
+
+        // KeyExpiryHashTableSize
+        _ = ReadLength(reader);
 
         int flag;
 
-        while ((flag = file.ReadByte()) != 0xFF)
+        while ((flag = file.ReadByte()) != EndDbFlag)
         {
-            ReadKeyValuePair(reader, flag, clock);
+            ReadKeyValuePair(reader, ref flag, clock);
         }
     }
 
-    private static void ReadKeyValuePair(BinaryReader reader, int flag, IClock clock)
+    private static string GetDbFilePath() => Path.Combine(Configuration.Directory, Configuration.DbFileName);
+
+    private static void ReadKeyValuePair(BinaryReader reader, ref int flag, IClock clock)
     {
         var expiry = default(DateTime);
         switch (flag)
         {
-            case 0xFD:
+            case ExpiryInSecondsFlag:
                 expiry = DateTime.UnixEpoch.AddSeconds(reader.ReadUInt32());
                 flag = reader.ReadByte();
                 break;
-            case 0xFC:
+            case ExpiryInMillisecondsFlag:
                 expiry = DateTime.UnixEpoch.AddMilliseconds(reader.ReadUInt64());
                 flag = reader.ReadByte();
                 break;
         }
-        
-        var key = DecodeString(reader);
+
+        var key = ReadString(reader);
 
         var value = flag switch
         {
-            0 => DecodeString(reader),
+            StringValueFlag => ReadString(reader),
             _ => throw new NotSupportedException("Value type is unsupported.")
         };
-        
+
         if (expiry != default && expiry < clock.Now())
         {
             return;
@@ -91,11 +123,36 @@ public static class Persistence
         }
     }
 
-    private static string DecodeString(BinaryReader reader)
+    private static void WriteDataStore(BinaryWriter writer,
+        IClock clock,
+        Dictionary<string, string> keyValueStore,
+        Dictionary<string, DateTime> keyExpiryStore)
+    {
+        foreach (var keyValuePair in keyValueStore)
+        {
+            if (keyExpiryStore.TryGetValue(keyValuePair.Key, out var expiry))
+            {
+                if (expiry <= clock.Now())
+                {
+                    continue;
+                }
+
+                var expiryInUnixTimestamp = (uint)(expiry - DateTime.UnixEpoch).TotalSeconds;
+                writer.Write(ExpiryInSecondsFlag);
+                writer.Write(expiryInUnixTimestamp);
+            }
+
+            writer.Write(StringValueFlag);
+            WriteString(writer, keyValuePair.Key);
+            WriteString(writer, keyValuePair.Value);
+        }
+    }
+
+    private static string ReadString(BinaryReader reader)
     {
         var firstByte = reader.ReadByte();
         var length = firstByte & 0x3F;
-        
+
         if (length == 0x3F)
         {
             length = ReadLength(reader);
@@ -105,10 +162,28 @@ public static class Persistence
         return Encoding.UTF8.GetString(data);
     }
 
+    private static void WriteString(BinaryWriter writer, string value)
+    {
+        var data = Encoding.UTF8.GetBytes(value);
+        var length = data.Length;
+
+        if (length < 0x3F)
+        {
+            writer.Write((byte)length);
+        }
+        else
+        {
+            writer.Write((byte)0x3F);
+            WriteLength(writer, length);
+        }
+
+        writer.Write(data);
+    }
+
     private static int ReadLength(BinaryReader reader)
     {
         var firstByte = reader.ReadByte();
-        
+
         if ((firstByte & 0x80) == 0)
         {
             // 6-bit length
@@ -124,5 +199,26 @@ public static class Persistence
 
         // 32-bit length
         return reader.ReadInt32();
+    }
+
+    private static void WriteLength(BinaryWriter writer, int value)
+    {
+        if (value < 0x80)
+        {
+            // 6-bit length
+            writer.Write((byte)value);
+        }
+        else if (value < 0x4000)
+        {
+            // 14-bit length
+            writer.Write((byte)((value >> 8) | 0x80)); // Set the first two bits
+            writer.Write((byte)(value & 0xFF)); // Write the remaining 8 bits
+        }
+        else
+        {
+            // 32-bit length
+            writer.Write((byte)0xC0); // Set the first two bits
+            writer.Write(value);
+        }
     }
 }

@@ -59,6 +59,7 @@ public class CommandConsumer : ICommandConsumer, IDisposable
             "getname" => ClientGetNameCommandHandler.Handle(args, client),
             _ => UnknownSubcommand(args[1])
         },
+        "save" => SaveCommandHandler.Handle(args, _clock),
         _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
     };
 
