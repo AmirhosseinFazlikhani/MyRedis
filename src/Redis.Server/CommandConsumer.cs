@@ -51,7 +51,7 @@ public class CommandConsumer : ICommandConsumer, IDisposable
             "get" => ConfigGetCommandHandler.Handle(args),
             _ => UnknownSubcommand(args[1])
         },
-        "keys" => KeysCommandHandler.Handle(args),
+        "keys" => KeysCommandHandler.Handle(args, _clock),
         "expire" => ExpireCommandHandler.Handle(args, _clock),
         "client" => args[1].ToLower() switch
         {

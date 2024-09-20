@@ -10,4 +10,9 @@ public static class DataStore
         return KeyValueStore.ContainsKey(key) &&
             (!KeyExpiryStore.TryGetValue(key, out var currentExpiry) || currentExpiry >= clock.Now());
     }
+
+    public static bool IsKeyLive(string key, IClock clock)
+    {
+        return !KeyExpiryStore.TryGetValue(key, out var currentExpiry) || currentExpiry >= clock.Now();
+    }
 }
