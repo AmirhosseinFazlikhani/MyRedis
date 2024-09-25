@@ -11,14 +11,25 @@ public static class Persistence
     private const byte ExpiryInSecondsFlag = 0xFD;
     private const byte ExpiryInMillisecondsFlag = 0xFC;
     private const int DbNumber = 0;
-    
+
     private static readonly byte[] Header = "REDIS"u8.ToArray();
     private static readonly byte[] Version = "0009"u8.ToArray();
+    private static volatile bool _saveInProgress;
+
+    public static bool SaveInProgress => _saveInProgress;
+    public static DateTime LastSaveDateTime { get; private set; }
 
     public static void Save(IClock clock,
         Dictionary<string, string> keyValueStore,
         Dictionary<string, DateTime> keyExpiryStore)
     {
+        if (_saveInProgress)
+        {
+            throw new SaveAlreadyInProgressException();
+        }
+        
+        _saveInProgress = true;
+
         var path = GetDbFilePath();
         var file = File.OpenWrite(path);
         using var writer = new BinaryWriter(file, leaveOpen: false, encoding: new UTF8Encoding(false));
@@ -31,6 +42,9 @@ public static class Persistence
         WriteLength(writer, keyExpiryStore.Count);
         WriteDataStore(writer, clock, keyValueStore, keyExpiryStore);
         writer.Write(EndDbFlag);
+
+        _saveInProgress = false;
+        LastSaveDateTime = clock.Now();
     }
 
     public static void Load(IClock clock)

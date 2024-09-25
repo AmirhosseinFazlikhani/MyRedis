@@ -2,7 +2,7 @@
 
 namespace Redis.Server;
 
-public class SaveCommandHandler
+public class BGSaveCommandHandler
 {
     public static IRespData Handle(string[] parameters, IClock clock)
     {
@@ -16,7 +16,10 @@ public class SaveCommandHandler
             return new RespSimpleError("ERR Background save already in progress");
         }
 
-        Persistence.Save(clock, DataStore.KeyValueStore, DataStore.KeyExpiryStore);
+        var keyValueStoreSnapshot = DataStore.KeyValueStore.ToDictionary();
+        var keyExpiryStoreSnapshot = DataStore.KeyExpiryStore.ToDictionary();
+        Task.Run(() => Persistence.Save(clock, keyValueStoreSnapshot, keyExpiryStoreSnapshot));
+
         return ReplyHelper.OK();
     }
 }

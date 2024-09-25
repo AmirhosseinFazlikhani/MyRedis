@@ -60,6 +60,8 @@ public class CommandConsumer : ICommandConsumer, IDisposable
             _ => UnknownSubcommand(args[1])
         },
         "save" => SaveCommandHandler.Handle(args, _clock),
+        "bgsave" => BGSaveCommandHandler.Handle(args, _clock),
+        "lastsave" => LastSaveCommandHandler.Handle(args),
         _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
     };
 
