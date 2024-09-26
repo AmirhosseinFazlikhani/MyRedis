@@ -27,21 +27,28 @@ public static class Persistence
         {
             throw new SaveAlreadyInProgressException();
         }
-        
+
         _saveInProgress = true;
 
-        var path = GetDbFilePath();
-        var file = File.OpenWrite(path);
-        using var writer = new BinaryWriter(file, leaveOpen: false, encoding: new UTF8Encoding(false));
-        writer.Write(Header);
-        writer.Write(Version);
-        writer.Write(EndMetadataFlag);
-        WriteLength(writer, DbNumber);
-        writer.Write(StartDbFlag);
-        WriteLength(writer, keyValueStore.Count);
-        WriteLength(writer, keyExpiryStore.Count);
-        WriteDataStore(writer, clock, keyValueStore, keyExpiryStore);
-        writer.Write(EndDbFlag);
+        var filePath = GetDbFilePath();
+        var tempFilePath = filePath + ".new";
+        var tempFile = File.OpenWrite(tempFilePath);
+
+        using (var writer = new BinaryWriter(tempFile, leaveOpen: false, encoding: new UTF8Encoding(false)))
+        {
+            writer.Write(Header);
+            writer.Write(Version);
+            writer.Write(EndMetadataFlag);
+            WriteLength(writer, DbNumber);
+            writer.Write(StartDbFlag);
+            WriteLength(writer, keyValueStore.Count);
+            WriteLength(writer, keyExpiryStore.Count);
+            WriteDataStore(writer, clock, keyValueStore, keyExpiryStore);
+            writer.Write(EndDbFlag);
+        }
+
+        File.Delete(filePath);
+        File.Move(tempFilePath, filePath);
 
         _saveInProgress = false;
         LastSaveDateTime = clock.Now();
