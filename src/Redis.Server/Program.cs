@@ -1,6 +1,9 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using CommandLine;
+using Serilog;
+using Serilog.Events;
+using Serilog.Exceptions;
 
 namespace Redis.Server;
 
@@ -35,31 +38,41 @@ class Program
             Configuration.DbFileName = parsedArgs.Value.DbFileName;
         }
 
+        Log.Logger = new LoggerConfiguration()
+            .Enrich.FromLogContext()
+            .Enrich.WithExceptionDetails()
+            .Enrich.WithMachineName()
+            .MinimumLevel.Information()
+            .MinimumLevel.Override("System", LogEventLevel.Error)
+            .WriteTo.Debug()
+            .WriteTo.Console()
+            .CreateLogger();
+
         TcpListener? server = null;
 
         try
         {
             var clock = new Clock();
             Persistence.Load(clock);
-            
+
             server = new TcpListener(IPAddress.Parse(Configuration.Host), Configuration.Port);
             server.Start();
-            Console.WriteLine("Server is now listening on {0}:{1}", Configuration.Host, Configuration.Port);
-            
+
+            Log.Information("Server is now listening on {Host}:{Port}",
+                Configuration.Host,
+                Configuration.Port);
+
             using var commandMediator = new CommandConsumer(clock);
             await ClientManager.AcceptClientAsync(server, commandMediator);
         }
         catch (Exception e)
         {
-            Console.Error.WriteLine(e);
+            Log.Fatal(e, "Application shutting down");
         }
         finally
         {
             server?.Stop();
         }
-
-        Console.WriteLine("\nHit enter to continue...");
-        Console.Read();
     }
 
     class InputArgs

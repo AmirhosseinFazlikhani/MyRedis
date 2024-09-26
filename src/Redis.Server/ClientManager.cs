@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using Serilog;
 
 namespace Redis.Server;
 
@@ -27,7 +28,7 @@ public static class ClientManager
                 {
                     if (t.Status == TaskStatus.Faulted)
                     {
-                        Console.Error.Write("Client {0}: {1}", client.ClientId, t.Exception);
+                        Log.Error(t.Exception, "Client {ClientId} disconnected", client.ClientId);
                     }
 
                     _clients.Remove(client);

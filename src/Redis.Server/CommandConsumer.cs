@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using RESP.DataTypes;
+using Serilog;
 
 namespace Redis.Server;
 
@@ -30,8 +31,9 @@ public class CommandConsumer : ICommandConsumer, IDisposable
                         var reply = HandleCommand(args, client);
                         client.Reply(reply);
                     }
-                    catch
+                    catch (Exception exception)
                     {
+                        Log.Error(exception, "An unhandled exception was thrown during handling a command");
                         var reply = new RespSimpleError("ERR internal error");
                         client.Reply(reply);
                     }
