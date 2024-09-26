@@ -22,6 +22,8 @@ public static class ClientManager
                 _clients.Add(client);
             }
 
+            Log.Information("Client {ClientId} connected", client.ClientId);
+
             _ = client.StartAsync().ContinueWith(t =>
             {
                 lock (_clientsLock)
@@ -29,6 +31,10 @@ public static class ClientManager
                     if (t.Status == TaskStatus.Faulted)
                     {
                         Log.Error(t.Exception, "Client {ClientId} disconnected", client.ClientId);
+                    }
+                    else
+                    {
+                        Log.Information("Client {ClientId} closed the connection", client.ClientId);
                     }
 
                     _clients.Remove(client);
