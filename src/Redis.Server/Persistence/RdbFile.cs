@@ -1,8 +1,8 @@
 ﻿using System.Text;
 
-namespace Redis.Server;
+namespace Redis.Server.Persistence;
 
-public static class Persistence
+public static class RdbFile
 {
     private const byte EndMetadataFlag = 0xFE;
     private const byte StartDbFlag = 0xFB;
@@ -14,26 +14,32 @@ public static class Persistence
 
     private static readonly byte[] Header = "REDIS"u8.ToArray();
     private static readonly byte[] Version = "0009"u8.ToArray();
-    private static volatile bool _saveInProgress;
-
-    public static bool SaveInProgress => _saveInProgress;
+    private static Task _saveTask = Task.CompletedTask;
+    public static bool SaveInProgress => _saveTask.Status == TaskStatus.Running;
+    
     public static DateTime LastSaveDateTime { get; private set; }
 
-    public static void Save(IClock clock,
+    public static Task SaveAsync(IClock clock,
         Dictionary<string, string> keyValueStore,
         Dictionary<string, DateTime> keyExpiryStore)
     {
-        if (_saveInProgress)
+        if (_saveTask.IsCompleted)
         {
-            throw new SaveAlreadyInProgressException();
+            _saveTask = Task.Run(() => Save(clock, keyValueStore, keyExpiryStore));
         }
 
-        _saveInProgress = true;
+        return _saveTask;
+    }
 
+    private static void Save(IClock clock,
+        Dictionary<string, string> keyValueStore,
+        Dictionary<string, DateTime> keyExpiryStore)
+    {
+        Thread.Sleep(5000);
         var filePath = GetDbFilePath();
         var tempFilePath = filePath + ".new";
         var tempFile = File.OpenWrite(tempFilePath);
-
+        
         using (var writer = new BinaryWriter(tempFile, leaveOpen: false, encoding: new UTF8Encoding(false)))
         {
             writer.Write(Header);
@@ -50,7 +56,6 @@ public static class Persistence
         File.Delete(filePath);
         File.Move(tempFilePath, filePath);
 
-        _saveInProgress = false;
         LastSaveDateTime = clock.Now();
     }
 

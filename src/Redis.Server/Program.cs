@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using CommandLine;
+using Redis.Server.Persistence;
 using Serilog;
 using Serilog.Events;
 using Serilog.Exceptions;
@@ -53,7 +54,7 @@ class Program
         try
         {
             var clock = new Clock();
-            Persistence.Load(clock);
+            RdbFile.Load(clock);
 
             server = new TcpListener(IPAddress.Parse(Configuration.Host), Configuration.Port);
             server.Start();

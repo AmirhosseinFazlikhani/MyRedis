@@ -1,6 +1,6 @@
 ﻿using RESP.DataTypes;
 
-namespace Redis.Server;
+namespace Redis.Server.Persistence;
 
 public class BGSaveCommandHandler
 {
@@ -11,14 +11,14 @@ public class BGSaveCommandHandler
             return ReplyHelper.WrongArgumentsNumberError("SAVE");
         }
 
-        if (Persistence.SaveInProgress)
+        if (RdbFile.SaveInProgress)
         {
             return new RespSimpleError("ERR Background save already in progress");
         }
 
         var keyValueStoreSnapshot = DataStore.KeyValueStore.ToDictionary();
         var keyExpiryStoreSnapshot = DataStore.KeyExpiryStore.ToDictionary();
-        Task.Run(() => Persistence.Save(clock, keyValueStoreSnapshot, keyExpiryStoreSnapshot));
+        RdbFile.SaveAsync(clock, keyValueStoreSnapshot, keyExpiryStoreSnapshot);
 
         return ReplyHelper.OK();
     }

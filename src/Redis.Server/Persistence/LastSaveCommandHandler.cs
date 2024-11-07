@@ -1,6 +1,6 @@
 ﻿using RESP.DataTypes;
 
-namespace Redis.Server;
+namespace Redis.Server.Persistence;
 
 public class LastSaveCommandHandler
 {
@@ -11,7 +11,7 @@ public class LastSaveCommandHandler
             return ReplyHelper.WrongArgumentsNumberError("LASTSAVE");
         }
 
-        var value = Persistence.LastSaveDateTime.Subtract(DateTime.UnixEpoch).TotalSeconds;
+        var value = RdbFile.LastSaveDateTime.Subtract(DateTime.UnixEpoch).TotalSeconds;
         return new RespInteger((long)value);
     }
 }
