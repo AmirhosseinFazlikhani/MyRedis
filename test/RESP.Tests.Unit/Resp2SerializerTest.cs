@@ -1,4 +1,5 @@
-﻿using RESP.DataTypes;
+﻿using System.Text;
+using RESP.DataTypes;
 
 namespace RESP.Tests.Unit;
 
@@ -63,7 +64,8 @@ public class Resp2SerializerTest
     [Fact]
     public void SerializeBigNumber_should_serialize_correctly()
     {
-        var result = Resp2Serializer.Serialize(new RespBigNumber("123456789123456789123456789123456789123456789123456789"));
+        var result =
+            Resp2Serializer.Serialize(new RespBigNumber("123456789123456789123456789123456789123456789123456789"));
         Assert.Equal("(123456789123456789123456789123456789123456789123456789\r\n", result);
     }
 
@@ -104,5 +106,27 @@ public class Resp2SerializerTest
         var result = Resp2Serializer.Serialize(array);
 
         Assert.Equal("*4\r\n+OK\r\n:123\r\n*2\r\n#t\r\n,1234\r\n*1\r\n#f\r\n", result);
+    }
+
+    [Fact]
+    public void Deserialize_should_deserialize_array_correctly()
+    {
+        var array = new RespArray([
+            new RespSimpleString("OK"),
+            new RespInteger(123),
+            new RespArray([
+                new RespBoolean(true),
+                new RespDouble(1234)
+            ]),
+            new RespArray([new RespBoolean(false)])
+        ]);
+
+        var serializedArray = Resp2Serializer.Serialize(array);
+        var arrayBytes = Encoding.UTF8.GetBytes(serializedArray);
+
+        var result = Resp2Serializer.Deserialize(arrayBytes);
+
+        Assert.Single(result);
+        Assert.Equivalent(array, result[0]);
     }
 }

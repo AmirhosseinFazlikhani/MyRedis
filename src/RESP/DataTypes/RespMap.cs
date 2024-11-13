@@ -2,5 +2,5 @@
 
 public record RespMap(KeyValuePair<RespSimpleString, IRespData>[] Entries) : IRespData
 {
-    public const string Prefix = "%";
+    public const char Prefix = '%';
 }

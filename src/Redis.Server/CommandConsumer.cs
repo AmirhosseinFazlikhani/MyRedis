@@ -1,5 +1,6 @@
 ﻿using System.Collections.Concurrent;
 using Redis.Server.Persistence;
+using Redis.Server.Replication;
 using RESP.DataTypes;
 using Serilog;
 
@@ -8,7 +9,7 @@ namespace Redis.Server;
 public class CommandConsumer : ICommandConsumer, IDisposable
 {
     private readonly IClock _clock;
-    private readonly BlockingCollection<(string[] args, ClientConnection sender)> _commandQueue = new();
+    private readonly BlockingCollection<(string[] args, ClientConnection? sender)> _commandQueue = new();
 
     public CommandConsumer(IClock clock)
     {
@@ -16,7 +17,7 @@ public class CommandConsumer : ICommandConsumer, IDisposable
         Start();
     }
 
-    public void Add(string[] args, ClientConnection sender)
+    public void Add(string[] args, ClientConnection? sender = null)
     {
         _commandQueue.Add((args, sender));
     }
@@ -30,23 +31,23 @@ public class CommandConsumer : ICommandConsumer, IDisposable
                     try
                     {
                         var reply = HandleCommand(args, client);
-                        client.Reply(reply);
+                        client?.Reply(reply);
                     }
                     catch (Exception exception)
                     {
                         Log.Error(exception, "An unhandled exception was thrown during handling a command");
                         var reply = new RespSimpleError("ERR internal error");
-                        client.Reply(reply);
+                        client?.Reply(reply);
                     }
                 }
             },
             TaskCreationOptions.LongRunning);
     }
 
-    private IRespData HandleCommand(string[] args, ClientConnection client) => args[0].ToLower() switch
+    private IRespData HandleCommand(string[] args, ClientConnection? client) => args[0].ToLower() switch
     {
         "ping" => PingCommandHandler.Handle(args),
-        "hello" => HelloCommandHandler.Handle(args, client),
+        "hello" => HelloCommandHandler.Handle(args, client ?? throw new ArgumentNullException(nameof(client))),
         "get" => GetCommandHandler.Handle(args, _clock),
         "set" => SetCommandHandler.Handle(args, _clock),
         "config" => args[1].ToLower() switch
@@ -58,13 +59,16 @@ public class CommandConsumer : ICommandConsumer, IDisposable
         "expire" => ExpireCommandHandler.Handle(args, _clock),
         "client" => args[1].ToLower() switch
         {
-            "setname" => ClientSetNameCommandHandler.Handle(args, client),
-            "getname" => ClientGetNameCommandHandler.Handle(args, client),
+            "setname" => ClientSetNameCommandHandler.Handle(args,
+                client ?? throw new ArgumentNullException(nameof(client))),
+            "getname" => ClientGetNameCommandHandler.Handle(args,
+                client ?? throw new ArgumentNullException(nameof(client))),
             _ => UnknownSubcommand(args[1])
         },
         "save" => SaveCommandHandler.Handle(args, _clock),
         "bgsave" => BGSaveCommandHandler.Handle(args, _clock),
         "lastsave" => LastSaveCommandHandler.Handle(args),
+        "replicaof" => ReplicaOfCommandHandler.Handle(args, _clock, this),
         _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
     };
 

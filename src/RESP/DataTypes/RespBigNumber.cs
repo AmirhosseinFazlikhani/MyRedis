@@ -2,5 +2,5 @@
 
 public record RespBigNumber(string Value) : IRespData
 {
-    public const string Prefix = "(";
+    public const char Prefix = '(';
 }

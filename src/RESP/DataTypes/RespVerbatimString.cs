@@ -2,5 +2,5 @@
 
 public record RespVerbatimString(string Value, string Encoding) : IRespData
 {
-    public const string Prefix = "=";
+    public const char Prefix = '=';
 }

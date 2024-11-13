@@ -2,5 +2,5 @@
 
 public record RespInteger(long Value) : IRespData
 {
-    public const string Prefix = ":";
+    public const char Prefix = ':';
 }

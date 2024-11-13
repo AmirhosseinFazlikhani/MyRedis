@@ -11,12 +11,12 @@ public static class RdbFile
     private const byte ExpiryInSecondsFlag = 0xFD;
     private const byte ExpiryInMillisecondsFlag = 0xFC;
     private const int DbNumber = 0;
+    private const short Version = 10;
 
     private static readonly byte[] Header = "REDIS"u8.ToArray();
-    private static readonly byte[] Version = "0009"u8.ToArray();
     private static Task _saveTask = Task.CompletedTask;
     public static bool SaveInProgress => _saveTask.Status == TaskStatus.Running;
-    
+
     public static DateTime LastSaveDateTime { get; private set; }
 
     public static Task SaveAsync(IClock clock,
@@ -35,15 +35,14 @@ public static class RdbFile
         Dictionary<string, string> keyValueStore,
         Dictionary<string, DateTime> keyExpiryStore)
     {
-        Thread.Sleep(5000);
         var filePath = GetDbFilePath();
         var tempFilePath = filePath + ".new";
         var tempFile = File.OpenWrite(tempFilePath);
-        
+
         using (var writer = new BinaryWriter(tempFile, leaveOpen: false, encoding: new UTF8Encoding(false)))
         {
             writer.Write(Header);
-            writer.Write(Version);
+            writer.Write(Version.ToString("0000"));
             writer.Write(EndMetadataFlag);
             WriteLength(writer, DbNumber);
             writer.Write(StartDbFlag);
@@ -59,9 +58,9 @@ public static class RdbFile
         LastSaveDateTime = clock.Now();
     }
 
-    public static void Load(IClock clock)
+    public static void Load(IClock clock, string? path = null)
     {
-        var path = GetDbFilePath();
+        path ??= GetDbFilePath();
 
         if (!File.Exists(path))
         {
@@ -76,7 +75,7 @@ public static class RdbFile
             throw new FormatException("Rdb file format is invalid.");
         }
 
-        if (!reader.ReadBytes(4).SequenceEqual(Version))
+        if (short.Parse(reader.ReadBytes(4)) > Version)
         {
             throw new NotSupportedException("Rdb file version is unsupported.");
         }

@@ -15,7 +15,7 @@ public class ClientConnection : IDisposable
     private readonly TcpClient _tcpClient;
     private readonly ICommandConsumer _commandConsumer;
     private readonly SemaphoreSlim _semaphore = new(0);
-    private readonly List<string[]> _commandQueue = new();
+    private int _sentCommandsCount = 0;
     private readonly List<IRespData> _replyQueue = new();
     private static readonly ArrayPool<byte> _arrayPool = ArrayPool<byte>.Create();
 
@@ -40,14 +40,15 @@ public class ClientConnection : IDisposable
 
         _started = true;
 
-        int offset;
         var buffer = _arrayPool.Rent(256);
 
         try
         {
-            while (await ReadPipeline())
+            while (await ReadPipeline() is { } commands)
             {
-                foreach (var command in _commandQueue)
+                _sentCommandsCount += commands.Count;
+                
+                foreach (var command in commands)
                 {
                     _commandConsumer.Add(command, this);
                 }
@@ -59,7 +60,7 @@ public class ClientConnection : IDisposable
 
                 await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedReplies));
 
-                _commandQueue.Clear();
+                _sentCommandsCount = 0;
                 _replyQueue.Clear();
             }
         }
@@ -71,17 +72,15 @@ public class ClientConnection : IDisposable
 
         return;
 
-        async Task<bool> ReadPipeline()
+        async Task<List<string[]>?> ReadPipeline()
         {
-            offset = 0;
-
             try
             {
                 var readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer);
 
                 if (readBytesCount == 0)
                 {
-                    return false;
+                    return null;
                 }
 
                 while (_tcpClient.GetStream().DataAvailable)
@@ -102,80 +101,14 @@ public class ClientConnection : IDisposable
                         .ReadAsync(buffer.AsMemory(readBytesCount));
                 }
 
-                while (offset < readBytesCount)
-                {
-                    var args = ReadStringArray();
-                    _commandQueue.Add(args);
-                }
-
-                return true;
+                var commands = Resp2Serializer.Deserialize(buffer[..readBytesCount]);
+                return commands.Select(RespDataHelper.AsBulkStringArray).ToList();
             }
             catch (IOException e)
                 when (e.InnerException is SocketException { SocketErrorCode: SocketError.ConnectionReset })
             {
-                return false;
+                return null;
             }
-            finally
-            {
-                _arrayPool.Return(buffer);
-            }
-        }
-
-        string[] ReadStringArray()
-        {
-            if (buffer[offset] != RespArray.Prefix)
-            {
-                throw new ProtocolException();
-            }
-
-            offset++;
-            var argsCountStartIndex = offset;
-
-            while (buffer[offset] != '\r')
-            {
-                offset++;
-            }
-
-            var argsCount = short.Parse(buffer.AsSpan(argsCountStartIndex..offset));
-            offset += 2;
-            var args = new string[argsCount];
-
-            while (argsCount > 0)
-            {
-                args[^argsCount] = ReadBulkString();
-                argsCount--;
-            }
-
-            return args;
-        }
-
-        string ReadBulkString()
-        {
-            if (buffer[offset] != RespBulkString.Prefix)
-            {
-                throw new ProtocolException();
-            }
-
-            offset++;
-            var sizeStartIndex = offset;
-
-            while (buffer[offset] != '\r')
-            {
-                offset++;
-            }
-
-            var stringSize = int.Parse(buffer.AsSpan(sizeStartIndex..offset));
-            offset += Resp2Serializer.TerminatorBytes.Length;
-
-            if (stringSize == 0)
-            {
-                offset += Resp2Serializer.TerminatorBytes.Length;
-                return string.Empty;
-            }
-
-            var result = Encoding.UTF8.GetString(buffer.AsSpan(offset, stringSize));
-            offset += stringSize + Resp2Serializer.TerminatorBytes.Length;
-            return result;
         }
     }
 
@@ -183,7 +116,7 @@ public class ClientConnection : IDisposable
     {
         _replyQueue.Add(data);
 
-        if (_commandQueue.Count == _replyQueue.Count)
+        if (_sentCommandsCount == _replyQueue.Count)
         {
             _semaphore.Release();
         }

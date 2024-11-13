@@ -2,5 +2,5 @@
 
 public record RespNull : IRespData
 {
-    public const string Prefix = "_";
+    public const char Prefix = '_';
 }
