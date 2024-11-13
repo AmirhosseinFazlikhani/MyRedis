@@ -248,6 +248,7 @@ public class Replica
                 _commandConsumer.Add(command);
             }
 
+            Offset += offset;
             offset = 0;
         }
     }
