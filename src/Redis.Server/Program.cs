@@ -63,7 +63,7 @@ class Program
                 Configuration.Host,
                 Configuration.Port);
 
-            using var commandMediator = new CommandConsumer(clock);
+            using var commandMediator = new CommandHandler(clock);
             await ClientManager.AcceptClientAsync(server, commandMediator);
         }
         catch (Exception e)

@@ -6,38 +6,38 @@ using Serilog;
 
 namespace Redis.Server;
 
-public class CommandConsumer : ICommandConsumer, IDisposable
+public class CommandHandler : ICommandHandler, IDisposable
 {
     private readonly IClock _clock;
-    private readonly BlockingCollection<(string[] args, ClientConnection? sender)> _commandQueue = new();
+    private readonly BlockingCollection<Command> _commandQueue = new();
 
-    public CommandConsumer(IClock clock)
+    public CommandHandler(IClock clock)
     {
         _clock = clock;
         Start();
     }
 
-    public void Add(string[] args, ClientConnection? sender = null)
+    public void Handle(string[] args, Action<IRespData>? callback, ClientConnection? sender)
     {
-        _commandQueue.Add((args, sender));
+        _commandQueue.Add(new Command(args, callback, sender));
     }
 
     private void Start()
     {
         Task.Factory.StartNew(() =>
             {
-                foreach (var (args, client) in _commandQueue.GetConsumingEnumerable())
+                foreach (var (args, callback, sender) in _commandQueue.GetConsumingEnumerable())
                 {
                     try
                     {
-                        var reply = HandleCommand(args, client);
-                        client?.Reply(reply);
+                        var reply = HandleCommand(args, sender);
+                        callback?.Invoke(reply);
                     }
                     catch (Exception exception)
                     {
                         Log.Error(exception, "An unhandled exception was thrown during handling a command");
                         var reply = new RespSimpleError("ERR internal error");
-                        client?.Reply(reply);
+                        callback?.Invoke(reply);
                     }
                 }
             },
@@ -81,4 +81,6 @@ public class CommandConsumer : ICommandConsumer, IDisposable
     {
         _commandQueue.Dispose();
     }
+
+    private record Command(string[] args, Action<IRespData>? callback, ClientConnection? Sender);
 }

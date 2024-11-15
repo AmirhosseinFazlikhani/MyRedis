@@ -8,28 +8,24 @@ namespace Redis.Server;
 
 public class ClientConnection : IDisposable
 {
-    public readonly int ClientId;
-    public string ClientName;
     private bool _started;
     private bool _disposed;
     private readonly TcpClient _tcpClient;
-    private readonly ICommandConsumer _commandConsumer;
+    private int _unhandledCommandsCount;
+    private readonly List<IRespData> _bufferedReplies = [];
     private readonly SemaphoreSlim _semaphore = new(0);
-    private int _sentCommandsCount = 0;
-    private readonly List<IRespData> _replyQueue = new();
-    private static readonly ArrayPool<byte> _arrayPool = ArrayPool<byte>.Create();
 
-    public ClientConnection(int clientId,
-        TcpClient tcpClient,
-        ICommandConsumer commandConsumer)
+    public ClientConnection(int clientId, TcpClient tcpClient)
     {
         ClientId = clientId;
         ClientName = string.Empty;
         _tcpClient = tcpClient;
-        _commandConsumer = commandConsumer;
     }
+    
+    public int ClientId { get; }
+    public string ClientName { get; set; }
 
-    public async Task StartAsync()
+    public async Task AcceptCommandsAsync(ICommandHandler commandConsumer)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -40,33 +36,33 @@ public class ClientConnection : IDisposable
 
         _started = true;
 
-        var buffer = _arrayPool.Rent(256);
+        var arrayPool = ArrayPool<byte>.Create();
+        var buffer = arrayPool.Rent(256);
 
         try
         {
             while (await ReadPipeline() is { } commands)
             {
-                _sentCommandsCount += commands.Count;
+                _unhandledCommandsCount = commands.Count;
                 
                 foreach (var command in commands)
                 {
-                    _commandConsumer.Add(command, this);
+                    commandConsumer.Handle(command, Reply, this);
                 }
 
                 await _semaphore.WaitAsync();
 
-                var serializedReplies = _replyQueue.Aggregate(string.Empty,
+                var serializedReplies = _bufferedReplies.Aggregate(string.Empty,
                     (current, reply) => current + (string)Resp2Serializer.Serialize((dynamic)reply));
 
                 await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedReplies));
 
-                _sentCommandsCount = 0;
-                _replyQueue.Clear();
+                _bufferedReplies.Clear();
             }
         }
         finally
         {
-            _arrayPool.Return(buffer);
+            arrayPool.Return(buffer);
             Dispose();
         }
 
@@ -92,9 +88,9 @@ public class ClientConnection : IDisposable
                         newBufferSize = int.MaxValue;
                     }
 
-                    var newBuffer = _arrayPool.Rent(newBufferSize);
+                    var newBuffer = arrayPool.Rent(newBufferSize);
                     Array.Copy(buffer, newBuffer, buffer.Length);
-                    _arrayPool.Return(buffer);
+                    arrayPool.Return(buffer);
                     buffer = newBuffer;
 
                     readBytesCount += await _tcpClient.GetStream()
@@ -112,11 +108,12 @@ public class ClientConnection : IDisposable
         }
     }
 
-    public void Reply(IRespData data)
+    private void Reply(IRespData data)
     {
-        _replyQueue.Add(data);
+        _bufferedReplies.Add(data);
+        _unhandledCommandsCount--;
 
-        if (_sentCommandsCount == _replyQueue.Count)
+        if (_unhandledCommandsCount == 0)
         {
             _semaphore.Release();
         }
@@ -130,6 +127,7 @@ public class ClientConnection : IDisposable
         }
 
         _tcpClient.Dispose();
+        _semaphore.Dispose();
         _disposed = true;
     }
 }

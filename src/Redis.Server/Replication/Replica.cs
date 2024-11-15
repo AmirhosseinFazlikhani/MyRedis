@@ -10,14 +10,14 @@ namespace Redis.Server.Replication;
 public class Replica
 {
     private readonly IClock _clock;
-    private readonly ICommandConsumer _commandConsumer;
+    private readonly ICommandHandler _commandHandler;
     private readonly Task _task;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
-    public Replica(NodeAddress masterAddress, IClock clock, ICommandConsumer _commandConsumer)
+    public Replica(NodeAddress masterAddress, IClock clock, ICommandHandler commandHandler)
     {
         _clock = clock;
-        this._commandConsumer = _commandConsumer;
+        _commandHandler = commandHandler;
         Status = ReplicaStatus.Initializing;
 
         _task = ConnectAsync(masterAddress, _cancellationTokenSource.Token)
@@ -245,7 +245,7 @@ public class Replica
 
             foreach (var command in commands)
             {
-                _commandConsumer.Add(command);
+                _commandHandler.Handle(command);
             }
 
             Offset += offset;

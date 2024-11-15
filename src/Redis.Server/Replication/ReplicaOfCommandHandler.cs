@@ -4,7 +4,7 @@ namespace Redis.Server.Replication;
 
 public static class ReplicaOfCommandHandler
 {
-    public static IRespData Handle(string[] args, IClock clock, ICommandConsumer commandConsumer)
+    public static IRespData Handle(string[] args, IClock clock, ICommandHandler commandConsumer)
     {
         if (args.Length != 3)
         {
