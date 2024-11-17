@@ -69,6 +69,7 @@ public class CommandHandler : ICommandHandler, IDisposable
         "bgsave" => BGSaveCommandHandler.Handle(args, _clock),
         "lastsave" => LastSaveCommandHandler.Handle(args),
         "replicaof" => ReplicaOfCommandHandler.Handle(args, _clock, this),
+        "del" => DelCommandHandler.Handle(args),
         _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
     };
 
