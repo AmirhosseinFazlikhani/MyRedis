@@ -70,6 +70,7 @@ public class CommandHandler : ICommandHandler, IDisposable
         "lastsave" => LastSaveCommandHandler.Handle(args),
         "replicaof" => ReplicaOfCommandHandler.Handle(args, _clock, this),
         "del" => DelCommandHandler.Handle(args),
+        "select" => SelectCommandHandler.Handle(args),
         _ => new RespSimpleError($"ERR unknown command '{args[0]}'")
     };
 
