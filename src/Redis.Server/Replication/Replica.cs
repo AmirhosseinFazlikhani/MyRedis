@@ -13,6 +13,7 @@ public class Replica
     private readonly ICommandHandler _commandHandler;
     private readonly Task _task;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
+    private readonly SemaphoreSlim _semaphoreSlim = new(0);
 
     public Replica(NodeAddress masterAddress, IClock clock, ICommandHandler commandHandler)
     {
@@ -32,8 +33,6 @@ public class Replica
 
                 Log.Information("Master connection closed!");
             });
-
-        Task.Run(() => _task);
     }
 
     public string? ReplicationId { get; private set; }
@@ -49,6 +48,7 @@ public class Replica
 
         await _cancellationTokenSource.CancelAsync();
         await _task;
+        _semaphoreSlim.Dispose();
     }
 
     private async Task ConnectAsync(NodeAddress masterAddress, CancellationToken cancellationToken)
@@ -56,15 +56,13 @@ public class Replica
         using var tcpClient = new TcpClient();
         await tcpClient.ConnectAsync(masterAddress.Host, masterAddress.Port, cancellationToken);
         var stream = tcpClient.GetStream();
-        await PingAsync(stream, cancellationToken);
+        await PlayPingPongAsync(stream, cancellationToken);
     }
 
-    private async Task PingAsync(NetworkStream networkStream, CancellationToken cancellationToken)
+    private async Task PlayPingPongAsync(NetworkStream networkStream, CancellationToken cancellationToken)
     {
         var command = new RespArray([new RespBulkString("PING")]);
-        var serializedCommand = Resp2Serializer.Serialize(command);
-        var commandBytes = Encoding.UTF8.GetBytes(serializedCommand);
-        await networkStream.WriteAsync(commandBytes, cancellationToken);
+        await SendCommandAsync(command, networkStream, cancellationToken);
 
         int readBytes;
         var buffer = new byte[128];
@@ -137,9 +135,7 @@ public class Replica
             new RespBulkString("-1"),
         ]);
 
-        var serializedCommand = Resp2Serializer.Serialize(command);
-        var commandBytes = Encoding.UTF8.GetBytes(serializedCommand);
-        await networkStream.WriteAsync(commandBytes, cancellationToken);
+        await SendCommandAsync(command, networkStream, cancellationToken);
 
         int readBytesCount;
         var buffer = new byte[1_000_000];
@@ -224,33 +220,67 @@ public class Replica
     {
         Status = ReplicaStatus.Running;
 
-        var buffer = new byte[1000];
+        var buffer = new byte[256];
         int readBytesCount;
-        var offset = 0;
+        var bufferSize = 0;
+        var syncFailed = false;
 
-        while ((readBytesCount = await networkStream.ReadAsync(buffer.AsMemory(offset..), cancellationToken)) != 0)
+        while ((readBytesCount = await networkStream.ReadAsync(buffer.AsMemory(bufferSize..), cancellationToken)) != 0)
         {
-            offset += readBytesCount;
+            bufferSize += readBytesCount;
 
-            if (buffer[..offset] is not [.., (byte)'\r', (byte)'\n'])
+            if (buffer.AsSpan(..bufferSize) is not [.., (byte)'\r', (byte)'\n'])
             {
                 buffer = GrowBuffer(buffer);
-                offset += readBytesCount;
                 continue;
             }
 
-            var commands = Resp2Serializer.Deserialize(buffer[..offset])
+            var commands = Resp2Serializer.Deserialize(buffer[..bufferSize])
                 .Select(RespDataHelper.AsBulkStringArray)
                 .ToList();
 
             foreach (var command in commands)
             {
-                _commandHandler.Handle(command);
+                _commandHandler.Handle(command, reply =>
+                {
+                    syncFailed = reply is RespSimpleError or RespBulkError;
+                    _semaphoreSlim.Release();
+                });
+
+                await _semaphoreSlim.WaitAsync(cancellationToken);
+
+                if (syncFailed)
+                {
+                    Log.Error("An error was occured while processing a command from master");
+                    return;
+                }
             }
 
-            Offset += offset;
-            offset = 0;
+            Offset += bufferSize;
+            bufferSize = 0;
+
+            await AckAsync(networkStream, cancellationToken);
         }
+    }
+
+    private async Task AckAsync(NetworkStream networkStream, CancellationToken cancellationToken)
+    {
+        var command = new RespArray([
+            new RespBulkString("REPLCONF"),
+            new RespBulkString("ACK"),
+            new RespBulkString(Offset.ToString()),
+        ]);
+
+        await SendCommandAsync(command, networkStream, cancellationToken);
+    }
+
+    private async Task SendCommandAsync(RespArray command,
+        NetworkStream networkStream,
+        CancellationToken cancellationToken)
+    {
+        var serializedCommand = Resp2Serializer.Serialize(command);
+        var commandBytes = Encoding.UTF8.GetBytes(serializedCommand);
+        await networkStream.WriteAsync(commandBytes, cancellationToken);
     }
 
     private static byte[] GrowBuffer(byte[] buffer)
