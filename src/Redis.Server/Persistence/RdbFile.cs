@@ -42,7 +42,7 @@ public static class RdbFile
         using (var writer = new BinaryWriter(tempFile, leaveOpen: false, encoding: new UTF8Encoding(false)))
         {
             writer.Write(Header);
-            writer.Write(Version.ToString("0000"));
+            writer.Write(Encoding.UTF8.GetBytes(Version.ToString("0000")));
             writer.Write(EndMetadataFlag);
             WriteLength(writer, DbNumber);
             writer.Write(StartDbFlag);
