@@ -13,7 +13,6 @@ public class Replica
     private readonly ICommandHandler _commandHandler;
     private readonly Task _task;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
-    private readonly SemaphoreSlim _semaphoreSlim = new(0);
 
     public Replica(NodeAddress masterAddress, IClock clock, ICommandHandler commandHandler)
     {
@@ -48,7 +47,6 @@ public class Replica
 
         await _cancellationTokenSource.CancelAsync();
         await _task;
-        _semaphoreSlim.Dispose();
     }
 
     private async Task ConnectAsync(NodeAddress masterAddress, CancellationToken cancellationToken)
@@ -223,13 +221,14 @@ public class Replica
         var buffer = new byte[256];
         int readBytesCount;
         var bufferSize = 0;
-        var syncFailed = false;
+        using var semaphoreSlim = new SemaphoreSlim(0);
 
         while ((readBytesCount = await networkStream.ReadAsync(buffer.AsMemory(bufferSize..), cancellationToken)) != 0)
         {
             bufferSize += readBytesCount;
+            var segmentIsCompletelyRead = buffer.AsSpan(..bufferSize) is [.., (byte)'\r', (byte)'\n'];
 
-            if (buffer.AsSpan(..bufferSize) is not [.., (byte)'\r', (byte)'\n'])
+            if (!segmentIsCompletelyRead)
             {
                 buffer = GrowBuffer(buffer);
                 continue;
@@ -241,25 +240,30 @@ public class Replica
 
             foreach (var command in commands)
             {
-                _commandHandler.Handle(command, reply =>
-                {
-                    syncFailed = reply is RespSimpleError or RespBulkError;
-                    _semaphoreSlim.Release();
-                });
-
-                await _semaphoreSlim.WaitAsync(cancellationToken);
-
-                if (syncFailed)
-                {
-                    Log.Error("An error was occured while processing a command from master");
-                    return;
-                }
+                var succeed = await HandleCommandAsync(command, semaphoreSlim, cancellationToken);
+                if (!succeed) return;
             }
 
             Offset += bufferSize;
             bufferSize = 0;
 
             await AckAsync(networkStream, cancellationToken);
+        }
+    }
+
+    private async Task<bool> HandleCommandAsync(string[] command,
+        SemaphoreSlim semaphoreSlim,
+        CancellationToken cancellationToken)
+    {
+        var succeed = true;
+        _commandHandler.Handle(command, Callback);
+        await semaphoreSlim.WaitAsync(cancellationToken);
+        return succeed;
+
+        void Callback(IRespData reply)
+        {
+            succeed = reply is not RespSimpleError and not RespBulkError;
+            semaphoreSlim.Release();
         }
     }
 
@@ -274,7 +278,7 @@ public class Replica
         await SendCommandAsync(command, networkStream, cancellationToken);
     }
 
-    private async Task SendCommandAsync(RespArray command,
+    private static async Task SendCommandAsync(RespArray command,
         NetworkStream networkStream,
         CancellationToken cancellationToken)
     {
