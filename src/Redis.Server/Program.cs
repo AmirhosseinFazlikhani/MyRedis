@@ -1,6 +1,7 @@
 ﻿using System.Net;
 using System.Net.Sockets;
 using CommandLine;
+using Redis.Server.CommandDispatching;
 using Redis.Server.Persistence;
 using Serilog;
 using Serilog.Events;
@@ -55,6 +56,7 @@ class Program
         {
             var clock = new Clock();
             RdbFile.Load(clock);
+            CommandSynchronizer.Start();
 
             server = new TcpListener(IPAddress.Parse(Configuration.Host), Configuration.Port);
             server.Start();
@@ -63,8 +65,10 @@ class Program
                 Configuration.Host,
                 Configuration.Port);
 
-            using var commandMediator = new CommandHandler(clock);
-            await ClientManager.AcceptClientAsync(server, commandMediator);
+            var cancellationTokenSource = new CancellationTokenSource();
+            Console.CancelKeyPress += (_, _) => { cancellationTokenSource.Cancel(); };
+
+            await ClientManager.AcceptClientAsync(clock, server, cancellationTokenSource.Token);
         }
         catch (Exception e)
         {
@@ -73,6 +77,7 @@ class Program
         finally
         {
             server?.Stop();
+            CommandSynchronizer.Stop();
         }
     }
 

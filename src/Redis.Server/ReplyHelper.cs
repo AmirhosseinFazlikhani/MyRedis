@@ -1,26 +1,26 @@
-﻿using RESP.DataTypes;
+﻿using Redis.Server.Protocol;
 
 namespace Redis.Server;
 
 public static class ReplyHelper
 {
-    public static RespSimpleString OK()
+    public static SimpleStringResult OK()
     {
-        return new RespSimpleString("OK");
+        return new SimpleStringResult("OK");
     }
 
-    public static RespSimpleError IntegerParsingError()
+    public static SimpleErrorResult IntegerParsingError()
     {
-        return new RespSimpleError("ERR value is not an integer or out of range");
+        return new SimpleErrorResult("ERR value is not an integer or out of range");
     }
 
-    public static RespSimpleError WrongArgumentsNumberError(string command)
+    public static SimpleErrorResult WrongArgumentsNumberError(string command)
     {
-        return new RespSimpleError($"ERR wrong number of arguments for '{command}' command");
+        return new SimpleErrorResult($"ERR wrong number of arguments for '{command}' command");
     }
 
-    public static RespSimpleError SyntaxError()
+    public static SimpleErrorResult SyntaxError()
     {
-        return new RespSimpleError("ERR syntax error");
+        return new SimpleErrorResult("ERR syntax error");
     }
 }

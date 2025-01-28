@@ -1,13 +1,25 @@
-﻿using RESP.DataTypes;
+﻿using Redis.Server.Protocol;
 
 namespace Redis.Server;
 
 public static class RespDataHelper
 {
-    public static string[] AsBulkStringArray(this IRespData data)
+    public static string[] AsBulkStringArray(this IResult data)
     {
-        var array = data as RespArray ?? throw new ProtocolException();
-        var items = array.Items.Select(i => i as RespBulkString ?? throw new ProtocolException());
+        if (data is not ArrayResult array)
+        {
+            throw new ProtocolException();
+        }
+
+        var items = array.Items.Select(i =>
+        {
+            if (i is not BulkStringResult bulkString)
+            {
+                throw new ProtocolException();
+            }
+
+            return bulkString;
+        });
         return items.Select(i => i.Value ?? throw new ProtocolException()).ToArray();
     }
 }

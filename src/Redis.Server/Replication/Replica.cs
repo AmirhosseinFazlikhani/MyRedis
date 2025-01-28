@@ -1,8 +1,8 @@
 ﻿using System.Net.Sockets;
 using System.Text;
+using Redis.Server.CommandDispatching;
 using Redis.Server.Persistence;
-using RESP;
-using RESP.DataTypes;
+using Redis.Server.Protocol;
 using Serilog;
 
 namespace Redis.Server.Replication;
@@ -10,14 +10,12 @@ namespace Redis.Server.Replication;
 public class Replica
 {
     private readonly IClock _clock;
-    private readonly ICommandHandler _commandHandler;
     private readonly Task _task;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
-    public Replica(NodeAddress masterAddress, IClock clock, ICommandHandler commandHandler)
+    public Replica(NodeAddress masterAddress, IClock clock)
     {
         _clock = clock;
-        _commandHandler = commandHandler;
         Status = ReplicaStatus.Initializing;
 
         _task = ConnectAsync(masterAddress, _cancellationTokenSource.Token)
@@ -59,7 +57,7 @@ public class Replica
 
     private async Task PlayPingPongAsync(NetworkStream networkStream, CancellationToken cancellationToken)
     {
-        var command = new RespArray([new RespBulkString("PING")]);
+        var command = new ArrayResult([new BulkStringResult("PING")]);
         await SendCommandAsync(command, networkStream, cancellationToken);
 
         int readBytes;
@@ -71,9 +69,9 @@ public class Replica
             return;
         }
 
-        var reply = Resp2Serializer.Deserialize(buffer[..readBytes]);
+        var reply = SerializerProvider.Serializer.Deserialize(buffer[..readBytes]);
 
-        if (reply is not [RespSimpleString { Value: "PONG" }])
+        if (reply is not [SimpleStringResult { Value: "PONG" }])
         {
             Status = ReplicaStatus.Failed;
             return;
@@ -84,21 +82,21 @@ public class Replica
 
     private async Task ConfigureAsync(NetworkStream networkStream, CancellationToken cancellationToken)
     {
-        var commands = new RespArray[]
+        var commands = new ArrayResult[]
         {
             new([
-                new RespBulkString("REPLCONF"),
-                new RespBulkString("listening-port"),
-                new RespBulkString(Configuration.Port.ToString())
+                new BulkStringResult("REPLCONF"),
+                new BulkStringResult("listening-port"),
+                new BulkStringResult(Configuration.Port.ToString())
             ]),
             new([
-                new RespBulkString("REPLCONF"),
-                new RespBulkString("capa"),
-                new RespBulkString("psync2")
+                new BulkStringResult("REPLCONF"),
+                new BulkStringResult("capa"),
+                new BulkStringResult("psync2")
             ])
         };
 
-        var serializedCommands = commands.Select(Resp2Serializer.Serialize)
+        var serializedCommands = commands.Select(c => SerializerProvider.Serializer.Serialize(c))
             .Select(Encoding.UTF8.GetBytes)
             .Aggregate((p, c) => p.Concat(c).ToArray())
             .ToArray();
@@ -114,9 +112,9 @@ public class Replica
             return;
         }
 
-        var reply = Resp2Serializer.Deserialize(buffer[..readBytes]);
+        var reply = SerializerProvider.Serializer.Deserialize(buffer[..readBytes]);
 
-        if (reply.Count != 2 || reply.Any(r => r is not RespSimpleString { Value: "OK" }))
+        if (reply.Count != 2 || reply.Any(r => r is not SimpleStringResult { Value: "OK" }))
         {
             Status = ReplicaStatus.Failed;
             return;
@@ -127,10 +125,10 @@ public class Replica
 
     private async Task InitialSyncAsync(NetworkStream networkStream, CancellationToken cancellationToken)
     {
-        var command = new RespArray([
-            new RespBulkString("PSYNC"),
-            new RespBulkString("?"),
-            new RespBulkString("-1"),
+        var command = new ArrayResult([
+            new BulkStringResult("PSYNC"),
+            new BulkStringResult("?"),
+            new BulkStringResult("-1"),
         ]);
 
         await SendCommandAsync(command, networkStream, cancellationToken);
@@ -144,9 +142,9 @@ public class Replica
             return;
         }
 
-        var reply = Resp2Serializer.Deserialize(buffer[..readBytesCount]);
+        var reply = SerializerProvider.Serializer.Deserialize(buffer[..readBytesCount]);
 
-        if (reply is not [RespSimpleString stringReply])
+        if (reply is not [SimpleStringResult stringReply])
         {
             Status = ReplicaStatus.Failed;
             return;
@@ -234,14 +232,27 @@ public class Replica
                 continue;
             }
 
-            var commands = Resp2Serializer.Deserialize(buffer[..bufferSize])
+            var commandArgs = SerializerProvider.Serializer.Deserialize(buffer[..bufferSize])
                 .Select(RespDataHelper.AsBulkStringArray)
                 .ToList();
 
-            foreach (var command in commands)
+            foreach (var args in commandArgs)
             {
-                var succeed = await HandleCommandAsync(command, semaphoreSlim, cancellationToken);
-                if (!succeed) return;
+                var command = CommandFactory.Create(args, _clock);
+
+                if (!command.IsSuccess)
+                {
+                    Log.Error("Failed to parse a command in replication stream: {Error}", command.Error!.Value);
+                    return;
+                }
+
+                var reply = await HandleCommandAsync(command.Value!, cancellationToken);
+
+                if (reply is IError error)
+                {
+                    Log.Error("Failed to handle a command in replication stream: {Error}", error.Value);
+                    return;
+                }
             }
 
             Offset += bufferSize;
@@ -251,38 +262,32 @@ public class Replica
         }
     }
 
-    private async Task<bool> HandleCommandAsync(string[] command,
-        SemaphoreSlim semaphoreSlim,
-        CancellationToken cancellationToken)
+    private async Task<IResult> HandleCommandAsync(ICommand command, CancellationToken cancellationToken)
     {
-        var succeed = true;
-        _commandHandler.Handle(command, Callback);
-        await semaphoreSlim.WaitAsync(cancellationToken);
-        return succeed;
+        var storedReply = default(IResult?);
 
-        void Callback(IRespData reply)
-        {
-            succeed = reply is not RespSimpleError and not RespBulkError;
-            semaphoreSlim.Release();
-        }
+        await CommandSynchronizer.PostAndWaitAsync(command, reply => storedReply = reply)
+            .WaitAsync(cancellationToken);
+
+        return storedReply!;
     }
 
     private async Task AckAsync(NetworkStream networkStream, CancellationToken cancellationToken)
     {
-        var command = new RespArray([
-            new RespBulkString("REPLCONF"),
-            new RespBulkString("ACK"),
-            new RespBulkString(Offset.ToString()),
+        var command = new ArrayResult([
+            new BulkStringResult("REPLCONF"),
+            new BulkStringResult("ACK"),
+            new BulkStringResult(Offset.ToString()),
         ]);
 
         await SendCommandAsync(command, networkStream, cancellationToken);
     }
 
-    private static async Task SendCommandAsync(RespArray command,
+    private static async Task SendCommandAsync(ArrayResult command,
         NetworkStream networkStream,
         CancellationToken cancellationToken)
     {
-        var serializedCommand = Resp2Serializer.Serialize(command);
+        var serializedCommand = SerializerProvider.Serializer.Serialize(command);
         var commandBytes = Encoding.UTF8.GetBytes(serializedCommand);
         await networkStream.WriteAsync(commandBytes, cancellationToken);
     }

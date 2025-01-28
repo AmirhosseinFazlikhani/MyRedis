@@ -1,8 +1,8 @@
 ﻿using System.Buffers;
 using System.Net.Sockets;
 using System.Text;
-using RESP;
-using RESP.DataTypes;
+using Redis.Server.CommandDispatching;
+using Redis.Server.Protocol;
 
 namespace Redis.Server;
 
@@ -11,21 +11,20 @@ public class ClientConnection : IDisposable
     private bool _started;
     private bool _disposed;
     private readonly TcpClient _tcpClient;
-    private int _unhandledCommandsCount;
-    private readonly List<IRespData> _bufferedReplies = [];
-    private readonly SemaphoreSlim _semaphore = new(0);
+    private readonly IClock _clock;
 
-    public ClientConnection(int clientId, TcpClient tcpClient)
+    public ClientConnection(int clientId, TcpClient tcpClient, IClock clock)
     {
         ClientId = clientId;
         ClientName = string.Empty;
         _tcpClient = tcpClient;
+        _clock = clock;
     }
-    
+
     public int ClientId { get; }
     public string ClientName { get; set; }
 
-    public async Task AcceptCommandsAsync(ICommandHandler commandConsumer)
+    public async Task AcceptCommandsAsync(CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
@@ -38,26 +37,45 @@ public class ClientConnection : IDisposable
 
         var arrayPool = ArrayPool<byte>.Create();
         var buffer = arrayPool.Rent(256);
+        var replies = new List<IResult>();
 
         try
         {
-            while (await ReadPipeline() is { } commands)
+            while (await ReadPipeline() is { } inputs)
             {
-                _unhandledCommandsCount = commands.Count;
-                
-                foreach (var command in commands)
+                if (cancellationToken.IsCancellationRequested)
                 {
-                    commandConsumer.Handle(command, Reply, this);
+                    return;
+                }
+                
+                var commands = inputs.Select(i => CommandFactory.Create(i, _clock, this)).ToList();
+                var validCommands = new List<ICommand>();
+                var errors = new List<(int index, IError error)>();
+
+                for (var i = 0; i < commands.Count; i++)
+                {
+                    if (commands[i].IsSuccess)
+                    {
+                        validCommands.Add(commands[i].Value!);
+                        continue;
+                    }
+
+                    errors.Add((i, commands[i].Error!));
                 }
 
-                await _semaphore.WaitAsync();
+                await CommandSynchronizer.PostAndWaitAsync(validCommands, SaveReply);
 
-                var serializedReplies = _bufferedReplies.Aggregate(string.Empty,
-                    (current, reply) => current + (string)Resp2Serializer.Serialize((dynamic)reply));
+                foreach (var (index, error) in errors)
+                {
+                    replies.Insert(index, error);
+                }
 
-                await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedReplies));
+                var serializedReplies = replies.Aggregate(string.Empty,
+                    (current, reply) => current + SerializerProvider.Serializer.Serialize(reply));
 
-                _bufferedReplies.Clear();
+                await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedReplies), cancellationToken);
+
+                replies.Clear();
             }
         }
         finally
@@ -68,11 +86,13 @@ public class ClientConnection : IDisposable
 
         return;
 
+        void SaveReply(IResult reply) => replies.Add(reply);
+
         async Task<List<string[]>?> ReadPipeline()
         {
             try
             {
-                var readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer);
+                var readBytesCount = await _tcpClient.GetStream().ReadAsync(buffer, cancellationToken);
 
                 if (readBytesCount == 0)
                 {
@@ -94,10 +114,10 @@ public class ClientConnection : IDisposable
                     buffer = newBuffer;
 
                     readBytesCount += await _tcpClient.GetStream()
-                        .ReadAsync(buffer.AsMemory(readBytesCount));
+                        .ReadAsync(buffer.AsMemory(readBytesCount), cancellationToken);
                 }
 
-                var commands = Resp2Serializer.Deserialize(buffer[..readBytesCount]);
+                var commands = SerializerProvider.Serializer.Deserialize(buffer[..readBytesCount]);
                 return commands.Select(RespDataHelper.AsBulkStringArray).ToList();
             }
             catch (IOException e)
@@ -105,17 +125,6 @@ public class ClientConnection : IDisposable
             {
                 return null;
             }
-        }
-    }
-
-    private void Reply(IRespData data)
-    {
-        _bufferedReplies.Add(data);
-        _unhandledCommandsCount--;
-
-        if (_unhandledCommandsCount == 0)
-        {
-            _semaphore.Release();
         }
     }
 
@@ -127,7 +136,7 @@ public class ClientConnection : IDisposable
         }
 
         _tcpClient.Dispose();
-        _semaphore.Dispose();
         _disposed = true;
+        GC.SuppressFinalize(this);
     }
 }

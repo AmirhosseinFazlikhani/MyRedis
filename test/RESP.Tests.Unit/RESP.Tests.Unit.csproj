@@ -21,7 +21,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\..\src\RESP\RESP.csproj" />
+      <ProjectReference Include="..\..\src\Redis.Server\Redis.Server.csproj" />
     </ItemGroup>
 
 </Project>

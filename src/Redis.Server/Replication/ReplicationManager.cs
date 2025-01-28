@@ -6,7 +6,7 @@ public static class ReplicationManager
 
     public static NodeRole Role { get; private set; }
 
-    public static void ReplicaOf(NodeAddress masterAddress, IClock clock, ICommandHandler commandConsumer)
+    public static void ReplicaOf(NodeAddress masterAddress, IClock clock)
     {
         if (_replica?.Status is ReplicaStatus.Initializing or ReplicaStatus.Running)
         {
@@ -14,7 +14,7 @@ public static class ReplicationManager
         }
 
         Role = NodeRole.Replica;
-        _replica = new Replica(masterAddress, clock, commandConsumer);
+        _replica = new Replica(masterAddress, clock);
     }
 
     public static void ReplicaOfNoOne()

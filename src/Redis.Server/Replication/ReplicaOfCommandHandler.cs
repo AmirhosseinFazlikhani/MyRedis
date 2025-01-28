@@ -1,28 +1,29 @@
-﻿using RESP.DataTypes;
+﻿using Redis.Server.Protocol;
 
 namespace Redis.Server.Replication;
 
-public static class ReplicaOfCommandHandler
+public class ReplicaOfCommandHandler : ICommand
 {
-    public static IRespData Handle(string[] args, IClock clock, ICommandHandler commandConsumer)
-    {
-        if (args.Length != 3)
-        {
-            return ReplyHelper.WrongArgumentsNumberError("REPLICAOF");
-        }
+    private readonly IClock _clock;
+    private readonly NodeAddress? _nodeAddress;
 
-        if (args[1].Equals("NO", StringComparison.OrdinalIgnoreCase) &&
-            args[2].Equals("ONE", StringComparison.OrdinalIgnoreCase))
+    public ReplicaOfCommandHandler(IClock clock, NodeAddress? nodeAddress)
+    {
+        _clock = clock;
+        _nodeAddress = nodeAddress;
+    }
+
+    public IResult Execute()
+    {
+        if (_nodeAddress.HasValue)
+        {
+            ReplicationManager.ReplicaOf(_nodeAddress.Value, _clock);
+        }
+        else
         {
             ReplicationManager.ReplicaOfNoOne();
         }
 
-        if (!int.TryParse(args[2], out var port))
-        {
-            return new RespSimpleError("ERR Invalid master port");
-        }
-
-        ReplicationManager.ReplicaOf(new NodeAddress(args[1], port), clock, commandConsumer);
         return ReplyHelper.OK();
     }
 }

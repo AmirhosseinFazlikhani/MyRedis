@@ -8,14 +8,21 @@ public static class ClientManager
     private static readonly List<ClientConnection> _clients = new();
     private static readonly object _clientsLock = new();
 
-    public static async Task AcceptClientAsync(TcpListener tcpListener, CommandHandler commandConsumer)
+    public static async Task AcceptClientAsync(IClock clock,
+        TcpListener tcpListener,
+        CancellationToken cancellationToken)
     {
         var lastClientId = 0;
 
         while (true)
         {
-            var tcpClient = await tcpListener.AcceptTcpClientAsync();
-            var client = new ClientConnection(++lastClientId, tcpClient);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            
+            var tcpClient = await tcpListener.AcceptTcpClientAsync(cancellationToken);
+            var client = new ClientConnection(++lastClientId, tcpClient, clock);
 
             lock (_clientsLock)
             {
@@ -24,22 +31,24 @@ public static class ClientManager
 
             Log.Information("Client {ClientId} connected", client.ClientId);
 
-            _ = client.AcceptCommandsAsync(commandConsumer).ContinueWith(t =>
-            {
-                if (t.Status == TaskStatus.Faulted)
-                {
-                    Log.Error(t.Exception, "Client {ClientId} disconnected", client.ClientId);
-                }
-                else
-                {
-                    Log.Information("Client {ClientId} closed the connection", client.ClientId);
-                }
+            _ = client.AcceptCommandsAsync(cancellationToken)
+                .ContinueWith(t =>
+                    {
+                        if (t.Status == TaskStatus.Faulted)
+                        {
+                            Log.Error(t.Exception, "Client {ClientId} disconnected", client.ClientId);
+                        }
+                        else
+                        {
+                            Log.Information("Client {ClientId} closed the connection", client.ClientId);
+                        }
 
-                lock (_clientsLock)
-                {
-                    _clients.Remove(client);
-                }
-            });
+                        lock (_clientsLock)
+                        {
+                            _clients.Remove(client);
+                        }
+                    },
+                    cancellationToken);
         }
     }
 }

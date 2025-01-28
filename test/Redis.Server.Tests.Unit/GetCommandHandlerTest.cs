@@ -1,6 +1,6 @@
 ﻿using AutoFixture;
 using NSubstitute;
-using RESP.DataTypes;
+using Redis.Server.Protocol;
 
 namespace Redis.Server.Tests.Unit;
 
@@ -9,19 +9,11 @@ public class GetCommandHandlerTest
     private static readonly Fixture _fixture = new();
 
     [Fact]
-    public void Should_return_error_when_there_are_some_additional_arguments()
-    {
-        var reply = GetCommandHandler.Handle(["GET", "foo", "LabLabLab"], new Clock());
-
-        Assert.Equal(new RespSimpleError("ERR wrong number of arguments for 'GET' command"), reply);
-    }
-
-    [Fact]
     public void Should_return_null_when_key_not_found()
     {
-        var reply = GetCommandHandler.Handle(["GET", _fixture.Create<string>()], new Clock());
+        var reply = new GetCommand(new Clock(), _fixture.Create<string>()).Execute();
 
-        Assert.Equal(new RespBulkString(null), reply);
+        Assert.Equal(new BulkStringResult(null), reply);
     }
 
     [Fact]
@@ -34,9 +26,9 @@ public class GetCommandHandlerTest
         DataStore.KeyValueStore[key] = _fixture.Create<string>();
         DataStore.KeyExpiryStore[key] = clock.Now().Subtract(TimeSpan.FromSeconds(1));
 
-        var reply = GetCommandHandler.Handle(["GET", key], new Clock());
+        var reply = new GetCommand(clock, key).Execute();
 
-        Assert.Equal(new RespBulkString(null), reply);
+        Assert.Equal(new BulkStringResult(null), reply);
     }
 
     [Fact]
@@ -49,7 +41,7 @@ public class GetCommandHandlerTest
         DataStore.KeyValueStore[key] = _fixture.Create<string>();
         DataStore.KeyExpiryStore[key] = clock.Now().Subtract(TimeSpan.FromSeconds(1));
 
-        GetCommandHandler.Handle(["GET", key], clock);
+        new GetCommand(clock, key).Execute();
 
         Assert.False(DataStore.KeyValueStore.ContainsKey(key));
         Assert.False(DataStore.KeyExpiryStore.ContainsKey(key));
@@ -63,9 +55,9 @@ public class GetCommandHandlerTest
 
         DataStore.KeyValueStore[key] = value;
 
-        var reply = GetCommandHandler.Handle(["GET", key], new Clock());
+        var reply = new GetCommand(new Clock(), key).Execute();
 
-        Assert.Equal(new RespBulkString(value), reply);
+        Assert.Equal(new BulkStringResult(value), reply);
     }
 
     [Fact]
@@ -79,8 +71,8 @@ public class GetCommandHandlerTest
         DataStore.KeyValueStore[key] = value;
         DataStore.KeyExpiryStore[key] = clock.Now().Add(TimeSpan.FromSeconds(1));
 
-        var reply = GetCommandHandler.Handle(["GET", key], new Clock());
+        var reply = new GetCommand(clock, key).Execute();
 
-        Assert.Equal(new RespBulkString(value), reply);
+        Assert.Equal(new BulkStringResult(value), reply);
     }
 }
