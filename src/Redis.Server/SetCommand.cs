@@ -2,7 +2,7 @@
 
 namespace Redis.Server;
 
-public class SetCommand:ICommand
+public class SetCommand : ICommand
 {
     private readonly IClock _clock;
     private readonly SetOptions _options;
@@ -15,53 +15,38 @@ public class SetCommand:ICommand
 
     public IResult Execute()
     {
-        switch (_options.Condition)
+        var conditionPassed = _options.Condition switch
         {
-            case SetCond.None:
-                SetValue();
-                break;
-            case SetCond.Exists:
-                if (!DataStore.ContainsKey(_options.Key, _clock))
-                {
-                    return new BulkStringResult(null);
-                }
+            SetCond.Exists => DataStore.ContainsKey(_options.Key, _clock),
+            SetCond.NotExists => !DataStore.ContainsKey(_options.Key, _clock),
+            SetCond.None => true,
+            _ => throw new ArgumentOutOfRangeException()
+        };
 
-                SetValue();
-                break;
-            case SetCond.NotExists:
-                if (DataStore.ContainsKey(_options.Key, _clock))
-                {
-                    return new BulkStringResult(null);
-                }
-
-                SetValue();
-                break;
-            default:
-                throw new ArgumentOutOfRangeException();
+        if (!conditionPassed)
+        {
+            return new BulkStringResult(null);
         }
 
-        return ReplyHelper.OK();
+        DataStore.KeyValueStore[_options.Key] = _options.Value;
         
-        void SetValue()
+        if (!_options.KeepTtl)
         {
-            DataStore.KeyValueStore[_options.Key] = _options.Value;
-
-            if (!_options.KeepTtl)
+            if (_options.Expiry.HasValue)
             {
-                if (_options.Expiry.HasValue)
-                {
-                    DataStore.KeyExpiryStore[_options.Key] = _options.Expiry.Value;
-                }
-                else
-                {
-                    DataStore.KeyExpiryStore.Remove(_options.Key);
-                }
+                DataStore.KeyExpiryStore[_options.Key] = _options.Expiry.Value;
             }
-            else if(DataStore.KeyExpiryStore.TryGetValue(_options.Key, out var oldExpiry) && oldExpiry < _clock.Now())
+            else
             {
                 DataStore.KeyExpiryStore.Remove(_options.Key);
             }
         }
+        else if (!DataStore.IsKeyLive(_options.Key, _clock))
+        {
+            DataStore.KeyExpiryStore.Remove(_options.Key);
+        }
+
+        return ReplyHelper.OK();
     }
 }
 

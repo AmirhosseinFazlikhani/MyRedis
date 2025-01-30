@@ -2,12 +2,12 @@
 
 namespace Redis.Server.Replication;
 
-public class ReplicaOfCommandHandler : ICommand
+public class ReplicaOfCommand : ICommand
 {
     private readonly IClock _clock;
     private readonly NodeAddress? _nodeAddress;
 
-    public ReplicaOfCommandHandler(IClock clock, NodeAddress? nodeAddress)
+    public ReplicaOfCommand(IClock clock, NodeAddress? nodeAddress)
     {
         _clock = clock;
         _nodeAddress = nodeAddress;

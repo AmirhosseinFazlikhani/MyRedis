@@ -213,7 +213,7 @@ public class CommandFactory
             }
 
             var nodeAddress = new NodeAddress(args[1], port);
-            return new ReplicaOfCommandHandler(clock, nodeAddress);
+            return new ReplicaOfCommand(clock, nodeAddress);
         }
 
         if (StartWith(args, "DEL"))
