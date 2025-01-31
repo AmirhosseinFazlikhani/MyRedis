@@ -76,7 +76,7 @@ public class ClientConnection : IDisposable
                 }
 
                 var serializedReplies = replies.Aggregate(string.Empty,
-                    (current, reply) => current + SerializerProvider.DefaultSerializer.Serialize(reply));
+                    (current, reply) => current + scope.Serializer.Serialize(reply));
 
                 await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedReplies), cancellationToken);
 
@@ -122,7 +122,7 @@ public class ClientConnection : IDisposable
                         .ReadAsync(buffer.AsMemory(readBytesCount), cancellationToken);
                 }
 
-                var commands = SerializerProvider.DefaultSerializer.Deserialize(buffer[..readBytesCount]);
+                var commands = scope.Serializer.Deserialize(buffer[..readBytesCount]);
                 return commands.Select(RespDataHelper.AsBulkStringArray).ToList();
             }
             catch (IOException e)
