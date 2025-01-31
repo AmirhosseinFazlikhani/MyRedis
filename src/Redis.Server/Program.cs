@@ -55,6 +55,8 @@ class Program
         try
         {
             var clock = new Clock();
+            var commandFactory = new CommandFactory(clock);
+
             RdbFile.Load(clock);
             CommandSynchronizer.Start();
 
@@ -68,7 +70,7 @@ class Program
             var cancellationTokenSource = new CancellationTokenSource();
             Console.CancelKeyPress += (_, _) => { cancellationTokenSource.Cancel(); };
 
-            await ClientManager.AcceptClientAsync(clock, server, cancellationTokenSource.Token);
+            await ClientManager.AcceptClientAsync(server, commandFactory, cancellationTokenSource.Token);
         }
         catch (Exception e)
         {

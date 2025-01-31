@@ -29,7 +29,7 @@ public class SetCommand : ICommand
         }
 
         DataStore.KeyValueStore[_options.Key] = _options.Value;
-        
+
         if (!_options.KeepTtl)
         {
             if (_options.Expiry.HasValue)
@@ -57,4 +57,11 @@ public class SetOptions
     public DateTime? Expiry { get; set; }
     public bool KeepTtl { get; set; }
     public SetCond Condition { get; set; } = SetCond.None;
+}
+
+public enum SetCond
+{
+    None,
+    Exists,
+    NotExists
 }

@@ -10,12 +10,14 @@ namespace Redis.Server.Replication;
 public class Replica
 {
     private readonly IClock _clock;
+    private readonly CommandFactory _commandFactory;
     private readonly Task _task;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
 
-    public Replica(NodeAddress masterAddress, IClock clock)
+    public Replica(NodeAddress masterAddress, IClock clock, CommandFactory commandFactory)
     {
         _clock = clock;
+        _commandFactory = commandFactory;
         Status = ReplicaStatus.Initializing;
 
         _task = ConnectAsync(masterAddress, _cancellationTokenSource.Token)
@@ -69,7 +71,7 @@ public class Replica
             return;
         }
 
-        var reply = SerializerProvider.Serializer.Deserialize(buffer[..readBytes]);
+        var reply = SerializerProvider.DefaultSerializer.Deserialize(buffer[..readBytes]);
 
         if (reply is not [SimpleStringResult { Value: "PONG" }])
         {
@@ -96,7 +98,7 @@ public class Replica
             ])
         };
 
-        var serializedCommands = commands.Select(c => SerializerProvider.Serializer.Serialize(c))
+        var serializedCommands = commands.Select(c => SerializerProvider.DefaultSerializer.Serialize(c))
             .Select(Encoding.UTF8.GetBytes)
             .Aggregate((p, c) => p.Concat(c).ToArray())
             .ToArray();
@@ -112,7 +114,7 @@ public class Replica
             return;
         }
 
-        var reply = SerializerProvider.Serializer.Deserialize(buffer[..readBytes]);
+        var reply = SerializerProvider.DefaultSerializer.Deserialize(buffer[..readBytes]);
 
         if (reply.Count != 2 || reply.Any(r => r is not SimpleStringResult { Value: "OK" }))
         {
@@ -142,7 +144,7 @@ public class Replica
             return;
         }
 
-        var reply = SerializerProvider.Serializer.Deserialize(buffer[..readBytesCount]);
+        var reply = SerializerProvider.DefaultSerializer.Deserialize(buffer[..readBytesCount]);
 
         if (reply is not [SimpleStringResult stringReply])
         {
@@ -232,13 +234,13 @@ public class Replica
                 continue;
             }
 
-            var commandArgs = SerializerProvider.Serializer.Deserialize(buffer[..bufferSize])
+            var commandArgs = SerializerProvider.DefaultSerializer.Deserialize(buffer[..bufferSize])
                 .Select(RespDataHelper.AsBulkStringArray)
                 .ToList();
 
             foreach (var args in commandArgs)
             {
-                var command = CommandFactory.Create(args, _clock);
+                var command = _commandFactory.Create(args, new Scope());
 
                 if (!command.IsSuccess)
                 {
@@ -287,7 +289,7 @@ public class Replica
         NetworkStream networkStream,
         CancellationToken cancellationToken)
     {
-        var serializedCommand = SerializerProvider.Serializer.Serialize(command);
+        var serializedCommand = SerializerProvider.DefaultSerializer.Serialize(command);
         var commandBytes = Encoding.UTF8.GetBytes(serializedCommand);
         await networkStream.WriteAsync(commandBytes, cancellationToken);
     }

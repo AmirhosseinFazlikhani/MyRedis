@@ -11,14 +11,14 @@ public class ClientConnection : IDisposable
     private bool _started;
     private bool _disposed;
     private readonly TcpClient _tcpClient;
-    private readonly IClock _clock;
+    private readonly CommandFactory _commandFactory;
 
-    public ClientConnection(int clientId, TcpClient tcpClient, IClock clock)
+    public ClientConnection(int clientId, TcpClient tcpClient, CommandFactory commandFactory)
     {
         ClientId = clientId;
         ClientName = string.Empty;
         _tcpClient = tcpClient;
-        _clock = clock;
+        _commandFactory = commandFactory;
     }
 
     public int ClientId { get; }
@@ -39,6 +39,11 @@ public class ClientConnection : IDisposable
         var buffer = arrayPool.Rent(256);
         var replies = new List<IResult>();
 
+        var scope = new Scope
+        {
+            Client = this
+        };
+
         try
         {
             while (await ReadPipeline() is { } inputs)
@@ -47,8 +52,8 @@ public class ClientConnection : IDisposable
                 {
                     return;
                 }
-                
-                var commands = inputs.Select(i => CommandFactory.Create(i, _clock, this)).ToList();
+
+                var commands = inputs.Select(i => _commandFactory.Create(i, scope)).ToList();
                 var validCommands = new List<ICommand>();
                 var errors = new List<(int index, IError error)>();
 
@@ -71,7 +76,7 @@ public class ClientConnection : IDisposable
                 }
 
                 var serializedReplies = replies.Aggregate(string.Empty,
-                    (current, reply) => current + SerializerProvider.Serializer.Serialize(reply));
+                    (current, reply) => current + SerializerProvider.DefaultSerializer.Serialize(reply));
 
                 await _tcpClient.GetStream().WriteAsync(Encoding.UTF8.GetBytes(serializedReplies), cancellationToken);
 
@@ -117,7 +122,7 @@ public class ClientConnection : IDisposable
                         .ReadAsync(buffer.AsMemory(readBytesCount), cancellationToken);
                 }
 
-                var commands = SerializerProvider.Serializer.Deserialize(buffer[..readBytesCount]);
+                var commands = SerializerProvider.DefaultSerializer.Deserialize(buffer[..readBytesCount]);
                 return commands.Select(RespDataHelper.AsBulkStringArray).ToList();
             }
             catch (IOException e)

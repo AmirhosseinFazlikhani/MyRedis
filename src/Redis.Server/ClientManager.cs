@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using Redis.Server.CommandDispatching;
 using Serilog;
 
 namespace Redis.Server;
@@ -8,8 +9,8 @@ public static class ClientManager
     private static readonly List<ClientConnection> _clients = new();
     private static readonly object _clientsLock = new();
 
-    public static async Task AcceptClientAsync(IClock clock,
-        TcpListener tcpListener,
+    public static async Task AcceptClientAsync(TcpListener tcpListener,
+        CommandFactory commandFactory,
         CancellationToken cancellationToken)
     {
         var lastClientId = 0;
@@ -20,9 +21,9 @@ public static class ClientManager
             {
                 return;
             }
-            
+
             var tcpClient = await tcpListener.AcceptTcpClientAsync(cancellationToken);
-            var client = new ClientConnection(++lastClientId, tcpClient, clock);
+            var client = new ClientConnection(++lastClientId, tcpClient, commandFactory);
 
             lock (_clientsLock)
             {

@@ -1,4 +1,6 @@
-﻿namespace Redis.Server.Replication;
+﻿using Redis.Server.CommandDispatching;
+
+namespace Redis.Server.Replication;
 
 public static class ReplicationManager
 {
@@ -6,7 +8,7 @@ public static class ReplicationManager
 
     public static NodeRole Role { get; private set; }
 
-    public static void ReplicaOf(NodeAddress masterAddress, IClock clock)
+    public static void ReplicaOf(NodeAddress masterAddress, IClock clock, CommandFactory commandFactory)
     {
         if (_replica?.Status is ReplicaStatus.Initializing or ReplicaStatus.Running)
         {
@@ -14,7 +16,7 @@ public static class ReplicationManager
         }
 
         Role = NodeRole.Replica;
-        _replica = new Replica(masterAddress, clock);
+        _replica = new Replica(masterAddress, clock, commandFactory);
     }
 
     public static void ReplicaOfNoOne()

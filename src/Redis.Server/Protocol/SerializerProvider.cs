@@ -2,5 +2,5 @@
 
 public static class SerializerProvider
 {
-    public static IResultSerializer Serializer { get; set; } = new Resp2Serializer();
+    public static IResultSerializer DefaultSerializer { get; set; } = new Resp2Serializer();
 }
