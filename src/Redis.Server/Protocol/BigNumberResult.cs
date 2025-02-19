@@ -1,6 +1,6 @@
 ﻿namespace Redis.Server.Protocol;
 
-public readonly struct BigNumberResult(string value) : IResult
+public class BigNumberResult(string value) : IResult
 {
     public string Value { get; } = value;
 }
