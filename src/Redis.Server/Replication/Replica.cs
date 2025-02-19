@@ -221,7 +221,6 @@ public class Replica
         var buffer = new byte[256];
         int readBytesCount;
         var bufferSize = 0;
-        using var semaphoreSlim = new SemaphoreSlim(0);
 
         while ((readBytesCount = await networkStream.ReadAsync(buffer.AsMemory(bufferSize..), cancellationToken)) != 0)
         {
